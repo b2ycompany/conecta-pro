@@ -1,0 +1,21 @@
+/* src/styles/globals.css */
+
+@import 'tailwindcss';
+
+/* REINTRODUZINDO NOSSAS VARIÁVEIS GLOBAIS E ESTILOS BASE */
+:root {
+  --color-background: #F8F9FA;
+  --color-text-primary: #212529;
+  --color-text-secondary: #6C757D;
+  --color-primary: #007BFF;
+  --color-primary-hover: #0056b3;
+  --color-success: #28A745;
+  --color-success-hover: #218838;
+  --color-border: #DEE2E6;
+  --color-input-bg: #FFFFFF;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+}
