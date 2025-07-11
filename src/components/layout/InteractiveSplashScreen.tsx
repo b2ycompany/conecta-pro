@@ -4,16 +4,17 @@
 
 import * as THREE from 'three';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { Points as DreiPoints, PointMaterial } from '@react-three/drei';
+import { Points, PointMaterial } from '@react-three/drei';
 import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
+import { Briefcase } from 'lucide-react';
 
 function Starfield(props: any) {
   const ref = useRef<THREE.Points>(null);
   const [sphere] = useState(() => {
     const positions = new Float32Array(5000 * 3);
+    const r = 1.5;
     for (let i = 0; i < 5000; i++) {
-      const r = 1.5;
       const theta = 2 * Math.PI * Math.random();
       const phi = Math.acos(2 * Math.random() - 1);
       const x = r * Math.sin(phi) * Math.cos(theta);
@@ -26,8 +27,11 @@ function Starfield(props: any) {
 
   useFrame((state, delta) => {
     if (ref.current) {
-      ref.current.rotation.x -= delta / 10;
-      ref.current.rotation.y -= delta / 15;
+      // Animação base que acontece sempre, mesmo no telemóvel
+      ref.current.rotation.x -= delta / 20;
+      ref.current.rotation.y -= delta / 25;
+
+      // Interação com o rato (só terá efeito no desktop)
       const { pointer } = state;
       ref.current.rotation.y += pointer.x * 0.01;
       ref.current.rotation.x -= pointer.y * 0.01;
@@ -36,7 +40,7 @@ function Starfield(props: any) {
 
   return (
     <group rotation={[0, 0, Math.PI / 4]}>
-      <DreiPoints ref={ref} positions={sphere} stride={3} frustumCulled={false} {...props}>
+      <Points ref={ref} positions={sphere} stride={3} frustumCulled={false} {...props}>
         <PointMaterial
           transparent
           color="#6699ff"
@@ -44,20 +48,17 @@ function Starfield(props: any) {
           sizeAttenuation={true}
           depthWrite={false}
         />
-      </DreiPoints>
+      </Points>
     </group>
   );
 }
 
-// CORREÇÃO: O componente agora não recebe mais a prop 'onAnimationComplete'.
-// A sua responsabilidade é apenas visual.
-export function InteractiveSplashScreen() {
+export function InteractiveSplashScreen({ onAnimationComplete }: { onAnimationComplete: () => void }) {
   return (
     <motion.div
       key="splash"
       className="fixed inset-0 z-50 bg-black"
-      // A animação de saída continua aqui, será ativada pelo AnimatePresence quando o componente for removido.
-      exit={{ opacity: 0, transition: { duration: 0.8 } }}
+      exit={{ opacity: 0, transition: { duration: 0.8, delay: 0.5 } }}
     >
       <Canvas camera={{ position: [0, 0, 2] }}>
         <ambientLight intensity={0.5} />
@@ -68,10 +69,16 @@ export function InteractiveSplashScreen() {
           className="text-white text-5xl md:text-7xl font-bold tracking-tighter"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0, transition: { duration: 1, delay: 0.5 } }}
+          exit={{ opacity: 0, y: -20, transition: { duration: 0.5 } }}
         >
-          B2Y Business 2 You
+          ConectaPro
         </motion.h1>
       </div>
+      <motion.div
+        initial={false}
+        animate={{ transition: { delay: 4 } }}
+        onAnimationComplete={onAnimationComplete}
+      />
     </motion.div>
   );
 }
