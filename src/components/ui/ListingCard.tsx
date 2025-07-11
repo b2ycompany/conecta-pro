@@ -6,8 +6,16 @@ import { motion } from 'framer-motion';
 import { Tag, MapPin, ArrowUpRight } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
-import type { Listing } from '@/lib/mockData';
 import { formatCurrency } from '@/lib/formatters';
+
+// CORREÇÃO: A linha abaixo agora EXPORTA o tipo 'Listing'.
+// Isso resolve o erro de build, permitindo que outras páginas (como a de resultados)
+// importem o tipo 'Listing' diretamente deste arquivo.
+export type { Listing } from '@/lib/mockData';
+
+// O import original foi removido, pois a linha acima já torna o tipo disponível aqui.
+import type { Listing } from '@/lib/mockData';
+
 
 interface ListingCardProps {
   listing: Listing;
