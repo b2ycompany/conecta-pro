@@ -2,14 +2,14 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { LoaderCircle, ListPlus } from 'lucide-react';
+import { LoaderCircle, ListPlus, Edit, Trash2 } from 'lucide-react';
 import { getUserCreatedListings, deleteListing } from '@/lib/firestoreService';
-import { MyListingCard } from '@/components/ui/MyListingCard'; // Importamos o novo componente
 import type { Listing } from '@/lib/mockData';
 import Link from 'next/link';
+import { ListingCard } from '@/components/ui/ListingCard'; // Reutilizamos o nosso cartão de visualização
 
 export default function MyListingsPage() {
     const { user, isLoading: isAuthLoading } = useAuth();
@@ -17,7 +17,8 @@ export default function MyListingsPage() {
     const [myListings, setMyListings] = useState<Listing[]>([]);
     const [isLoadingData, setIsLoadingData] = useState(true);
 
-    const fetchMyListings = () => {
+    // Função para buscar os anúncios, que pode ser chamada novamente após uma exclusão
+    const fetchMyListings = useCallback(() => {
         if (user) {
             setIsLoadingData(true);
             getUserCreatedListings(user.uid)
@@ -25,20 +26,24 @@ export default function MyListingsPage() {
                 .catch(err => console.error(err))
                 .finally(() => setIsLoadingData(false));
         }
-    };
+    }, [user]);
 
     useEffect(() => {
         if (!isAuthLoading) {
-            if (user) fetchMyListings();
-            else router.push('/login');
+            if (user) {
+                fetchMyListings();
+            } else {
+                router.push('/login');
+            }
         }
-    }, [user, isAuthLoading, router]);
+    }, [user, isAuthLoading, router, fetchMyListings]);
 
     const handleDelete = async (listingId: string, listingTitle: string) => {
         if (window.confirm(`Tem a certeza que deseja excluir o anúncio "${listingTitle}"? Esta ação não pode ser desfeita.`)) {
             try {
                 await deleteListing(listingId);
-                fetchMyListings(); // Atualiza a lista de anúncios após a exclusão
+                // Atualiza a lista de anúncios na tela após a exclusão
+                fetchMyListings();
                 alert("Anúncio excluído com sucesso.");
             } catch (error) {
                 alert("Ocorreu um erro ao excluir o anúncio.");
@@ -65,11 +70,19 @@ export default function MyListingsPage() {
             {myListings.length > 0 ? (
                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                     {myListings.map(listing => (
-                        <MyListingCard 
-                            key={listing.id} 
-                            listing={listing} 
-                            onDelete={() => handleDelete(listing.id, listing.title)}
-                        />
+                        <div key={listing.id} className="bg-white rounded-lg shadow-sm border border-border flex flex-col">
+                            {/* O cartão é para visualização e link */}
+                            <ListingCard listing={listing} />
+                            {/* A barra de ações é separada */}
+                            <div className="flex border-t border-border">
+                                <Link href={`/anuncios/editar/${listing.id}`} className="flex-1 flex items-center justify-center gap-2 p-3 text-sm font-medium text-text-secondary hover:bg-gray-50 rounded-bl-lg transition-colors">
+                                    <Edit size={14} /> Editar
+                                </Link>
+                                <button onClick={() => handleDelete(listing.id, listing.title)} className="flex-1 flex items-center justify-center gap-2 p-3 text-sm font-medium text-red-500 hover:bg-red-50 rounded-br-lg transition-colors border-l border-border">
+                                    <Trash2 size={14} /> Excluir
+                                </button>
+                            </div>
+                        </div>
                     ))}
                 </div>
             ) : (

@@ -2,106 +2,128 @@
 
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { motion } from 'framer-motion';
-import { Send, ArrowLeft, LoaderCircle } from 'lucide-react';
-import Link from 'next/link';
-import { useMessages } from '@/hooks/useMessages'; // 1. Importamos nosso novo hook
-import { sendMessage } from '@/lib/firestoreService'; // Importamos a função de enviar mensagem
+import { useMessages } from '@/hooks/useMessages';
+import { getDoc, doc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { sendMessage, submitReviewAndRecalculateAverage } from '@/lib/firestoreService';
+import { LoaderCircle, Send, Star } from 'lucide-react';
+import { ReviewFormModal } from '@/components/ui/ReviewFormModal'; // Importamos o nosso novo modal
 
 export default function ConversationPage() {
-  const router = useRouter();
   const params = useParams<{ conversationId: string }>();
+  const router = useRouter();
   const { user } = useAuth();
-
-  // 2. Usamos o hook para obter as mensagens e o estado de carregamento em tempo real
   const { messages, isLoading } = useMessages(params.conversationId);
   const [newMessage, setNewMessage] = useState('');
-  const messagesEndRef = useRef<null | HTMLDivElement>(null);
+  const [conversationData, setConversationData] = useState<any>(null);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (params.conversationId) {
+      const fetchConversationData = async () => {
+        const docRef = doc(db, 'conversations', params.conversationId as string);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          setConversationData(docSnap.data());
+        } else {
+          router.push('/mensagens');
+        }
+      };
+      fetchConversationData();
+    }
+  }, [params.conversationId, router]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !newMessage.trim()) return;
-
-    try {
-      // 3. Chamamos a função de serviço para salvar a mensagem no Firestore
+    if (newMessage.trim() && user) {
       await sendMessage(params.conversationId, user.uid, newMessage);
       setNewMessage('');
+    }
+  };
+
+  const handleReviewSubmit = async (rating: number, comment: string) => {
+    if (!user || !user.name || !conversationData) {
+        alert("Erro: não foi possível identificar os utilizadores.");
+        return;
+    }
+    
+    const otherUserId = conversationData.participantIds.find((id: string) => id !== user.uid);
+    if (!otherUserId) {
+        alert("Erro: não foi possível identificar o utilizador a ser avaliado.");
+        return;
+    }
+
+    try {
+        await submitReviewAndRecalculateAverage(otherUserId, {
+            rating,
+            comment,
+            reviewerId: user.uid,
+            reviewerName: user.name, // Usamos o nome do nosso AuthContext melhorado!
+            listingId: conversationData.listingId
+        });
+        alert("Avaliação enviada com sucesso!");
     } catch (error) {
-      console.error(error);
-      alert("Erro ao enviar mensagem.");
+        alert("Ocorreu um erro ao enviar a sua avaliação.");
     }
   };
   
-  // Se o utilizador não estiver logado, ou o estado de auth estiver a carregar, não mostra nada
-  if (!user) {
-    return (
-      <div className="min-h-screen flex justify-center items-center">
-        <LoaderCircle size={48} className="animate-spin text-primary" />
-      </div>
-    );
+  const otherUser = conversationData?.participantIds.find((id: string) => id !== user?.uid);
+
+ if (isLoading || !conversationData) {
+
+    return <div className="min-h-screen flex justify-center items-center"><LoaderCircle size={48} className="animate-spin" /></div>;
   }
 
   return (
-    <div className="flex flex-col h-screen bg-background">
-      <header className="flex items-center p-4 bg-white border-b border-border shadow-sm">
-        <button onClick={() => router.back()} className="p-2 rounded-full hover:bg-gray-100">
-          <ArrowLeft size={24} className="text-text-primary" />
-        </button>
-        <div className="ml-4">
-          <h1 className="font-bold text-text-primary">Chat da Negociação</h1>
-          <p className="text-sm text-success">Online</p>
+    <>
+      <div className="flex flex-col h-[calc(100vh-80px)] max-w-4xl mx-auto">
+        <div className="p-4 border-b flex justify-between items-center">
+            <h1 className="text-xl font-bold">Conversa</h1>
+            {otherUser && (
+                <button 
+                    onClick={() => setIsReviewModalOpen(true)}
+                    className="flex items-center gap-2 text-sm bg-yellow-400 hover:bg-yellow-500 text-black font-semibold py-2 px-3 rounded-lg"
+                >
+                    <Star size={16} /> Avaliar Utilizador
+                </button>
+            )}
         </div>
-      </header>
 
-      <main className="flex-1 overflow-y-auto p-4 space-y-4">
-        {isLoading ? (
-            <div className="flex justify-center items-center h-full"><LoaderCircle className="animate-spin text-primary"/></div>
-        ) : (
-            messages.map((msg) => {
-            const isMe = msg.senderId === user?.uid;
-            return (
-                <motion.div
-                key={msg.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`flex items-end gap-2 ${isMe ? 'justify-end' : 'justify-start'}`}
-                >
-                <div 
-                    className={`max-w-md p-3 rounded-2xl shadow-sm ${isMe ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white text-text-primary border border-border rounded-bl-none'}`}
-                >
-                    <p>{msg.text}</p>
-                    <p className={`text-xs mt-1 text-right ${isMe ? 'text-blue-200' : 'text-text-secondary'}`}>
-                    {msg.timestamp ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '...'}
-                    </p>
-                </div>
-                </motion.div>
-            );
-            })
-        )}
-        <div ref={messagesEndRef} />
-      </main>
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {messages.map((msg) => (
+            <div key={msg.id} className={`flex ${msg.senderId === user?.uid ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-xs lg:max-w-md p-3 rounded-lg ${msg.senderId === user?.uid ? 'bg-blue-600 text-white' : 'bg-gray-200 text-black'}`}>
+                <p>{msg.text}</p>
+              </div>
+            </div>
+          ))}
+        </div>
 
-      <footer className="p-4 bg-white border-t border-border">
-        <form onSubmit={handleSendMessage} className="flex items-center gap-4">
-          <input
-            type="text"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Digite sua mensagem..."
-            className="flex-1 px-4 py-2 bg-input-bg border border-border rounded-full focus:outline-none focus:ring-2 focus:ring-primary"
-          />
-          <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-full transition-colors shadow-sm">
-            <Send size={20} />
-          </button>
-        </form>
-      </footer>
-    </div>
+        <div className="p-4 border-t">
+          <form onSubmit={handleSendMessage} className="flex gap-2">
+            <input
+              type="text"
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              className="flex-1 p-3 border rounded-lg"
+              placeholder="Escreva a sua mensagem..."
+            />
+            <button type="submit" className="p-3 bg-blue-600 text-white rounded-lg"><Send /></button>
+          </form>
+        </div>
+      </div>
+      
+      {otherUser && (
+        <ReviewFormModal
+            isOpen={isReviewModalOpen}
+            onClose={() => setIsReviewModalOpen(false)}
+            onSubmit={handleReviewSubmit}
+            reviewedUserName={"este utilizador"} // Idealmente, buscaríamos o nome do outro utilizador
+        />
+      )}
+    </>
   );
 }

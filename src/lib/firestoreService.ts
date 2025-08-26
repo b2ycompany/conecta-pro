@@ -13,7 +13,8 @@ import {
   query,
   where,
   orderBy,
-  updateDoc
+  updateDoc,
+  runTransaction // Importamos a função de transação
 } from 'firebase/firestore';
 import type { Listing } from './mockData';
 
@@ -36,8 +37,37 @@ type UserProfile = {
     name: string;
 };
 
-type UserDocument = {
-    profile: UserProfile;
+// TIPO ATUALIZADO: Para incluir os dados de avaliação
+type UserDocument = { 
+  profile: UserProfile; 
+  reviewCount?: number; 
+  averageRating?: number;
+};
+
+export type EnrichedConversation = {
+  id: string;
+  listing: {
+    id: string;
+    title: string;
+    imageUrl: string;
+  };
+  otherParticipant: {
+    id: string;
+    name: string;
+  };
+  lastMessage: string;
+  lastMessageTimestamp: any;
+};
+
+// NOVO TIPO: Para uma avaliação individual
+export type Review = {
+  id: string;
+  rating: number;
+  comment: string;
+  reviewerId: string;
+  reviewerName: string;
+  listingId: string;
+  createdAt: any;
 };
 
 
@@ -50,6 +80,7 @@ export const saveListingForUser = async (userId: string, listingId: string, list
       savedAt: serverTimestamp(),
       title: listingTitle,
     });
+    console.log("Anúncio salvo com sucesso!");
   } catch (error) {
     console.error("Erro ao salvar anúncio: ", error);
     throw new Error("Não foi possível salvar o anúncio.");
@@ -60,6 +91,7 @@ export const removeSavedListing = async (userId: string, listingId: string) => {
   try {
     const listingRef = doc(db, 'users', userId, 'savedListings', listingId);
     await deleteDoc(listingRef);
+    console.log("Anúncio removido com sucesso!");
   } catch (error) {
     console.error("Erro ao remover anúncio: ", error);
     throw new Error("Não foi possível remover o anúncio.");
@@ -94,44 +126,23 @@ export const getUserSavedListings = async (userId: string): Promise<SavedListing
 };
 
 export const createListing = async (userId: string, formData: any) => {
-  try {
-    const listingsCollectionRef = collection(db, 'listings');
-    
-    const priceAsNumber = formData.price ? Number(String(formData.price).replace(/\./g, '').replace(',', '.')) : 0;
-    const revenueAsNumber = formData.annualRevenue ? Number(String(formData.annualRevenue).replace(/\./g, '').replace(',', '.')) : 0;
-    const profitAsNumber = formData.profitMargin ? Number(String(formData.profitMargin).replace(',', '.')) / 100 : 0;
-    const employeesAsNumber = Number(formData.employees) || 0;
-    const locationString = `${formData.location.address}, ${formData.location.number}${formData.location.complement ? `, ${formData.location.complement}` : ''} - ${formData.location.city}, ${formData.location.state}`;
-    
-    const dataToSave = {
-      listingType: formData.listingType,
-      title: formData.title,
-      sector: formData.sector,
-      location: locationString.trim(),
-      price: priceAsNumber,
-      description: formData.description,
-      imageUrl: formData.imageUrl,
-      gallery: formData.gallery,
-      annualRevenue: revenueAsNumber,
-      profitMargin: profitAsNumber,
-      employees: employeesAsNumber,
-      monthlyCosts: {
-        rent: formData.monthlyCosts.rent ? Number(String(formData.monthlyCosts.rent).replace(/\./g, '').replace(',', '.')) : 0,
-        utilities: formData.monthlyCosts.utilities ? Number(String(formData.monthlyCosts.utilities).replace(/\./g, '').replace(',', '.')) : 0,
-        payroll: formData.monthlyCosts.payroll ? Number(String(formData.monthlyCosts.payroll).replace(/\./g, '').replace(',', '.')) : 0,
-        others: formData.monthlyCosts.others ? Number(String(formData.monthlyCosts.others).replace(/\./g, '').replace(',', '.')) : 0,
-      },
-      ownerId: userId,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    };
-
-    const newListingDocRef = await addDoc(listingsCollectionRef, dataToSave);
-    return newListingDocRef.id;
-  } catch (error) {
-    console.error("Erro ao criar anúncio: ", error);
-    throw new Error("Não foi possível publicar o seu anúncio.");
-  }
+    try {
+      const listingsCollectionRef = collection(db, 'listings');
+      
+      const dataToSave = {
+        ...formData,
+        ownerId: userId,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+  
+      const newListingDocRef = await addDoc(listingsCollectionRef, dataToSave);
+      console.log("Novo anúncio criado com o ID: ", newListingDocRef.id);
+      return newListingDocRef.id;
+    } catch (error) {
+      console.error("Erro ao criar anúncio: ", error);
+      throw new Error("Não foi possível publicar o seu anúncio.");
+    }
 };
 
 export const getListingForEdit = async (listingId: string) => {
@@ -163,7 +174,7 @@ export const deleteListing = async (listingId: string) => {
       const listingRef = doc(db, 'listings', listingId);
       await deleteDoc(listingRef);
     } catch (error) {
-      console.error("Erro ao excluir anúncio: ", error);
+      console.error("Erro ao excluir anúncio:", error);
       throw new Error("Não foi possível excluir o anúncio.");
     }
 };
@@ -230,43 +241,120 @@ export const getUserCreatedListings = async (userId: string): Promise<Listing[]>
     }
 };
 
-export const getEnrichedUserConversas = async (userId: string): Promise<any[]> => {
-    const conversationsRef = collection(db, "conversations");
-    const q = query(conversationsRef, where("participantIds", "array-contains", userId), orderBy("lastMessageTimestamp", "desc"));
-    const querySnapshot = await getDocs(q);
+export const getEnrichedUserConversas = async (userId: string): Promise<EnrichedConversation[]> => {
+    try {
+        const conversationsRef = collection(db, "conversations");
+        const q = query(conversationsRef, where("participantIds", "array-contains", userId), orderBy("lastMessageTimestamp", "desc"));
+        const querySnapshot = await getDocs(q);
 
-    return await Promise.all(querySnapshot.docs.map(async (conversationDoc) => {
-        const conversationData = conversationDoc.data();
-        const listingId = conversationData.listingId;
-        const otherParticipantId = conversationData.participantIds.find((id: string) => id !== userId);
+        const enrichedConversations = await Promise.all(querySnapshot.docs.map(async (conversationDoc) => {
+            const conversationData = conversationDoc.data();
+            const listingId = conversationData.listingId;
+            const otherParticipantId = conversationData.participantIds.find((id: string) => id !== userId);
 
-        let listingData: any = { title: 'Anúncio não encontrado', imageUrl: '' };
-        if (listingId) {
-            const listingDocRef = doc(db, 'listings', listingId);
-            const listingSnap = await getDoc(listingDocRef);
-            if (listingSnap.exists()) {
-                listingData = listingSnap.data();
-            }
+            const [listingSnap, userSnap] = await Promise.all([
+                listingId ? getDoc(doc(db, 'listings', listingId)) : Promise.resolve(null),
+                otherParticipantId ? getDoc(doc(db, 'users', otherParticipantId)) : Promise.resolve(null)
+            ]);
+
+            const listingData = listingSnap?.exists() ? listingSnap.data() : { title: 'Anúncio Removido', imageUrl: '/placeholder.png' };
+            
+            const userData = userSnap?.exists() ? (userSnap.data() as UserDocument) : null;
+            const otherUserName = userData?.profile?.name || `Utilizador Anónimo`;
+
+            return {
+                id: conversationDoc.id,
+                listing: { id: listingId, title: listingData.title, imageUrl: listingData.imageUrl },
+                otherParticipant: { id: otherParticipantId, name: otherUserName },
+                lastMessage: conversationData.lastMessage,
+                lastMessageTimestamp: conversationData.lastMessageTimestamp,
+            } as EnrichedConversation;
+        }));
+
+        return enrichedConversations;
+    } catch (error) {
+        console.error("Erro ao enriquecer conversas: ", error);
+        return [];
+    }
+};
+
+// --- NOVAS FUNÇÕES DO SISTEMA DE AVALIAÇÃO ---
+
+/**
+ * Busca os dados públicos de um perfil de utilizador, incluindo as suas métricas de avaliação.
+ */
+export const getUserProfile = async (userId: string): Promise<UserDocument | null> => {
+    try {
+        const userRef = doc(db, 'users', userId);
+        const docSnap = await getDoc(userRef);
+        if (docSnap.exists()) {
+            return docSnap.data() as UserDocument;
         }
+        return null;
+    } catch (error) {
+        console.error("Erro ao buscar perfil do utilizador: ", error);
+        return null;
+    }
+};
 
-        let otherUserData: any = { id: otherParticipantId, name: 'Utilizador Removido' };
-        if (otherParticipantId) {
-            const userDocRef = doc(db, 'users', otherParticipantId);
-            const userSnap = await getDoc(userDocRef);
-            const userData = userSnap.data() as UserDocument | undefined;
-            if (userSnap.exists() && userData?.profile) {
-                otherUserData = { id: otherParticipantId, name: userData.profile.name };
-            } else {
-                otherUserData.name = `Utilizador ${otherParticipantId.substring(0,5)}`;
+/**
+ * Busca todas as avaliações que um utilizador recebeu.
+ */
+export const getUserReviews = async (userId: string): Promise<Review[]> => {
+    try {
+        const reviewsRef = collection(db, 'users', userId, 'reviews');
+        const q = query(reviewsRef, orderBy('createdAt', 'desc'));
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(snapshot => ({ id: snapshot.id, ...snapshot.data() } as Review));
+    } catch (error) {
+        console.error("Erro ao buscar avaliações: ", error);
+        return [];
+    }
+};
+
+/**
+ * Submete uma nova avaliação para um utilizador e recalcula a sua média de forma atómica.
+ */
+export const submitReviewAndRecalculateAverage = async (
+    reviewedUserId: string, 
+    reviewData: {
+        rating: number;
+        comment: string;
+        reviewerId: string;
+        reviewerName: string;
+        listingId: string;
+    }
+) => {
+    const userRef = doc(db, 'users', reviewedUserId);
+    const reviewRef = doc(collection(userRef, 'reviews'));
+
+    try {
+        await runTransaction(db, async (transaction) => {
+            const userDoc = await transaction.get(userRef);
+            
+            if (!userDoc.exists()) {
+                throw "Documento do utilizador não existe!";
             }
-        }
+            
+            // 1. Adiciona a nova avaliação na sub-coleção
+            transaction.set(reviewRef, { ...reviewData, createdAt: serverTimestamp() });
 
-        return {
-            id: conversationDoc.id,
-            listing: { id: listingId, title: listingData.title, imageUrl: listingData.imageUrl },
-            otherParticipant: otherUserData,
-            lastMessage: conversationData.lastMessage,
-            lastMessageTimestamp: conversationData.lastMessageTimestamp,
-        };
-    }));
+            // 2. Recalcula a média
+            const currentReviewCount = userDoc.data().reviewCount || 0;
+            const currentAverageRating = userDoc.data().averageRating || 0;
+            
+            const newReviewCount = currentReviewCount + 1;
+            const newAverageRating = ((currentAverageRating * currentReviewCount) + reviewData.rating) / newReviewCount;
+
+            // 3. Atualiza os dados agregados no documento principal do utilizador
+            transaction.update(userRef, { 
+                reviewCount: newReviewCount,
+                averageRating: newAverageRating
+            });
+        });
+        console.log("Avaliação submetida e média recalculada com sucesso!");
+    } catch (error) {
+        console.error("Erro na transação de avaliação: ", error);
+        throw new Error("Não foi possível submeter a avaliação.");
+    }
 };

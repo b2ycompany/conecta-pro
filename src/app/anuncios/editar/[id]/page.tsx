@@ -5,8 +5,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter, useParams } from 'next/navigation';
-import { motion } from 'framer-motion';
-import { Send, LoaderCircle } from 'lucide-react';
+import { LoaderCircle, Send } from 'lucide-react';
 import { getListingForEdit, updateListing } from '@/lib/firestoreService';
 import { IMaskInput } from 'react-imask';
 
@@ -15,7 +14,7 @@ export default function EditListingPage() {
     const params = useParams<{ id: string }>();
     const { user, isLoading: isAuthLoading } = useAuth();
     
-    // O estado do formulário agora começa como nulo
+    // O estado do formulário começa como nulo até os dados serem carregados
     const [formData, setFormData] = useState<any>(null); 
     const [isLoadingData, setIsLoadingData] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -25,6 +24,7 @@ export default function EditListingPage() {
         if (params.id) {
             getListingForEdit(params.id as string)
                 .then(data => {
+                    // Garante que o anúncio existe e que o utilizador logado é o dono
                     if (data && user && data.ownerId === user.uid) {
                         setFormData(data);
                     } else {
@@ -63,6 +63,7 @@ export default function EditListingPage() {
         return <div className="min-h-screen flex justify-center items-center"><LoaderCircle size={48} className="animate-spin text-blue-600" /></div>;
     }
 
+    // O formulário de edição será mais simples, focando nos campos principais por agora
     return (
         <div className="min-h-screen bg-background p-8 flex justify-center">
             <div className="w-full max-w-3xl bg-white rounded-xl shadow-lg p-8">
@@ -86,6 +87,7 @@ export default function EditListingPage() {
                             className="w-full mt-1 p-2 border rounded-md"
                         />
                     </div>
+                    {/* Adicionar mais campos para edição aqui no futuro */}
                     <div className="text-right pt-6">
                         <button type="submit" disabled={isSubmitting} className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg flex items-center gap-2 ml-auto">
                             {isSubmitting ? <LoaderCircle className="animate-spin"/> : <Send size={16}/>}
