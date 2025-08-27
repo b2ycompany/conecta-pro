@@ -72,7 +72,6 @@ function AuthPageContent() {
         const password = form.get('password') as string;
 
         try {
-            // CORREÇÃO: Garantir que 'login' está em minúsculas
             await login(email, password);
             router.push('/');
         } catch (err: any) {
@@ -82,6 +81,8 @@ function AuthPageContent() {
         }
     };
 
+    // Função de Signup agora é dividida em duas partes
+    // Parte 1: Cria o utilizador no Firebase Auth
     const handleSignupStep1 = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         setError('');
@@ -90,7 +91,8 @@ function AuthPageContent() {
         const password = (event.currentTarget.elements.namedItem('password') as HTMLInputElement).value;
 
         try {
-            await signup(email, password);
+            // A função signup do context agora retorna o utilizador criado, mas sem o perfil
+            await signup(email, password, {}); // Passamos um perfil vazio inicialmente
             setLoading(false);
             setSignupStep(2);
         } catch (err: any) {
@@ -103,6 +105,7 @@ function AuthPageContent() {
         }
     };
     
+    // Parte 2: Salva os dados do perfil no Firestore
     const handleProfileSubmit = async () => {
         if (!user) {
             alert("Sessão não encontrada. Por favor, tente fazer login.");
@@ -114,8 +117,10 @@ function AuthPageContent() {
         setLoading(true);
         setError('');
         try {
+            // Apenas salvamos o perfil, o utilizador já foi criado
             await saveUserProfile(user.uid, formData);
             
+            // Redirecionamento inteligente
             switch (formData.profileType) {
                 case 'seller':
                     router.push('/anuncios/novo');
@@ -127,7 +132,7 @@ function AuthPageContent() {
                     router.push('/investir');
                     break;
                 default:
-                    router.push('/');
+                    router.push('/dashboard');
                     break;
             }
         } catch (error) {
@@ -167,12 +172,14 @@ function AuthPageContent() {
                     <motion.div key={3} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
                         <h2 className="text-xl font-semibold text-center text-text-primary">Passo Final: Complete o seu perfil</h2>
                         <div><label className="text-sm font-medium text-text-primary">Nome Completo</label><input name="name" value={formData.name} onChange={handleInputChange} className="mt-1 w-full p-2 border border-border rounded-md"/></div>
-                        <div><label className="text-sm font-medium text-text-primary">CPF/CNPJ</label><IMaskInput mask={[{ mask: '000.000.000-00' }, { mask: '00.000.000/0000-00' }]} name="document" value={formData.document} onAccept={(value) => handleMaskedInputChange(value, 'document')} className="mt-1 w-full p-2 border border-border rounded-md"/></div>
-                        <div><label className="text-sm font-medium text-text-primary">Telefone</label><IMaskInput mask="(00) 00000-0000" name="phone" value={formData.phone} onAccept={(value) => handleMaskedInputChange(value, 'phone')} className="mt-1 w-full p-2 border border-border rounded-md"/></div>
-                        <div><label className="text-sm font-medium text-text-primary">CEP</label><IMaskInput mask="00000-000" name="cep" value={formData.cep} onAccept={(value) => handleMaskedInputChange(value, 'cep')} className="mt-1 w-full p-2 border border-border rounded-md"/></div>
+                        <div><label className="text-sm font-medium text-text-primary">CPF/CNPJ</label><IMaskInput mask={[{ mask: '000.000.000-00' }, { mask: '00.000.000/0000-00' }]} value={formData.document} onAccept={(value) => handleMaskedInputChange(value, 'document')} className="mt-1 w-full p-2 border border-border rounded-md"/></div>
+                        <div><label className="text-sm font-medium text-text-primary">Telefone</label><IMaskInput mask="(00) 00000-0000" value={formData.phone} onAccept={(value) => handleMaskedInputChange(value, 'phone')} className="mt-1 w-full p-2 border border-border rounded-md"/></div>
+                        <div><label className="text-sm font-medium text-text-primary">CEP</label><IMaskInput mask="00000-000" value={formData.cep} onAccept={(value) => handleMaskedInputChange(value, 'cep')} className="mt-1 w-full p-2 border border-border rounded-md"/></div>
                         <div><label className="text-sm font-medium text-text-primary">Morada</label><input name="address" value={formData.address} onChange={handleInputChange} className="mt-1 w-full p-2 border rounded-md"/></div>
-                        <div><label className="text-sm font-medium text-text-primary">Cidade/Estado</label><input name="city" value={formData.city ? `${formData.city} / ${formData.state}` : ''} disabled className="mt-1 w-full p-2 border border-border rounded-md bg-gray-100"/></div>
-                        <button onClick={handleProfileSubmit} className="w-full flex justify-center py-2 px-4 rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700">Concluir Cadastro</button>
+                        <div><label className="text-sm font-medium text-text-primary">Cidade/Estado</label><input value={formData.city ? `${formData.city} / ${formData.state}` : ''} disabled className="mt-1 w-full p-2 border rounded-md bg-gray-100"/></div>
+                        <button onClick={handleProfileSubmit} disabled={loading} className="w-full flex justify-center py-2 px-4 rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700">
+                           {loading ? <LoaderCircle className="animate-spin" /> : 'Concluir Cadastro'}
+                        </button>
                     </motion.div>
                 );
             default:
@@ -202,7 +209,7 @@ function AuthPageContent() {
                 </AnimatePresence>
 
                 <div className="text-center">
-                    <button onClick={() => { setAuthMode(authMode === 'login' ? 'signup' : 'login'); setError(''); }} className="text-sm font-medium text-blue-600 hover:text-blue-500">
+                    <button onClick={() => { setAuthMode(authMode === 'login' ? 'signup' : 'login'); setError(''); setSignupStep(1); }} className="text-sm font-medium text-blue-600 hover:text-blue-500">
                         {authMode === 'login' ? 'Não tem uma conta? Cadastre-se' : 'Já tem uma conta? Faça login'} <ArrowRight size={14} className="inline ml-1"/>
                     </button>
                 </div>
