@@ -14,22 +14,27 @@ import {
 import { auth, db } from '@/lib/firebase';
 import { doc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { saveUserProfile } from '@/lib/firestoreService';
-import type { UserProfile } from '@/lib/types'; // Importamos o nosso novo tipo
+import type { UserProfile } from '@/lib/types';
 
-// O tipo de Utilizador agora inclui o perfil completo
 interface AppUser extends User {
   name?: string;
-  profile?: UserProfile; // Usamos o tipo UserProfile
+  profile?: UserProfile;
   isAdmin?: boolean;
 }
 
-// O tipo do contexto agora inclui a nova informação
+// ALTERAÇÃO: Novo tipo para o resultado da função de login
+interface LoginResult {
+  user: User;
+  isAdmin: boolean;
+}
+
 interface AuthContextType {
   user: AppUser | null;
   isLoading: boolean;
   isAdmin: boolean;
-  isPhoneVerified: boolean; // NOVO: Status de verificação
-  login: (email: string, pass: string) => Promise<User>;
+  isPhoneVerified: boolean;
+  // ALTERAÇÃO: O tipo de retorno da função login foi atualizado
+  login: (email: string, pass: string) => Promise<LoginResult>;
   signup: (email: string, pass: string, profileData: any) => Promise<User>;
   logout: () => Promise<void>;
 }
@@ -39,7 +44,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<AppUser | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [isPhoneVerified, setIsPhoneVerified] = useState(false); // NOVO estado
+  const [isPhoneVerified, setIsPhoneVerified] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const authInstance = getAuth();
 
@@ -50,13 +55,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         let docSnap = await getDoc(userDocRef);
 
         if (!docSnap.exists()) {
-          console.log(`Perfil não encontrado para o utilizador ${firebaseUser.uid}. A criar perfil padrão...`);
           const defaultProfile: UserProfile = { 
             name: firebaseUser.email?.split('@')[0] || 'Novo Utilizador', 
             email: firebaseUser.email || '' 
           };
           await saveUserProfile(firebaseUser.uid, defaultProfile);
-          docSnap = await getDoc(userDocRef); // Re-busca o documento recém-criado
+          docSnap = await getDoc(userDocRef);
         }
         
         const userData = docSnap.data();
@@ -69,12 +73,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         setUser(appUser);
         setIsAdmin(appUser.isAdmin || false);
-        // NOVO: Definimos o estado de verificação com base nos dados do perfil
         setIsPhoneVerified(userData?.profile?.phoneVerified === true);
       } else {
         setUser(null);
         setIsAdmin(false);
-        setIsPhoneVerified(false); // NOVO: Resetamos o estado ao fazer logout
+        setIsPhoneVerified(false);
       }
       setIsLoading(false);
     });
@@ -82,15 +85,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => unsubscribe();
   }, [authInstance]);
 
-  const login = async (email: string, pass: string) => {
+  // ALTERAÇÃO: A função login agora é mais inteligente e retorna mais informação
+  const login = async (email: string, pass: string): Promise<LoginResult> => {
     const userCredential = await signInWithEmailAndPassword(authInstance, email, pass);
-    return userCredential.user;
+    const firebaseUser = userCredential.user;
+
+    // Após o login, vamos ao Firestore verificar o perfil
+    const userDocRef = doc(db, 'users', firebaseUser.uid);
+    const docSnap = await getDoc(userDocRef);
+
+    let userIsAdmin = false;
+    if (docSnap.exists()) {
+      // Verificamos se a propriedade 'role' no documento é 'admin'
+      userIsAdmin = docSnap.data().role === 'admin';
+    }
+
+    // Retornamos um objeto com o utilizador e a confirmação de admin
+    return { user: firebaseUser, isAdmin: userIsAdmin };
   };
 
   const signup = async (email: string, pass: string, profileData: any) => {
     const userCredential = await createUserWithEmailAndPassword(authInstance, email, pass);
     const firebaseUser = userCredential.user;
-    // Garante que o email está incluído no perfil ao registar-se
     const completeProfileData: UserProfile = { ...profileData, email };
     await saveUserProfile(firebaseUser.uid, completeProfileData);
     return firebaseUser;

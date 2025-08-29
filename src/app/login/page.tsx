@@ -44,7 +44,7 @@ function AuthPageContent() {
                     if (!data.erro) {
                         setFormData(prev => ({
                             ...prev,
-                            address: data.logradouro,
+                            address: data.logouro,
                             city: data.localidade,
                             state: data.uf,
                         }));
@@ -63,6 +63,7 @@ function AuthPageContent() {
       setFormData(prev => ({ ...prev, [name]: value as any }));
     };
     
+    // ALTERAÇÃO: A lógica de redirecionamento após o login foi atualizada
     const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         setError('');
@@ -72,8 +73,15 @@ function AuthPageContent() {
         const password = form.get('password') as string;
 
         try {
-            await login(email, password);
-            router.push('/');
+            // A função login agora retorna um objeto com 'user' e 'isAdmin'
+            const { isAdmin } = await login(email, password);
+
+            // Lógica de redirecionamento inteligente
+            if (isAdmin) {
+                router.push('/admin'); // Se for admin, vai para o painel de administração
+            } else {
+                router.push('/dashboard'); // Senão, vai para o dashboard normal
+            }
         } catch (err: any) {
             setError('Email ou palavra-passe inválidos. Tente novamente.');
         } finally {
@@ -91,7 +99,6 @@ function AuthPageContent() {
         const password = (event.currentTarget.elements.namedItem('password') as HTMLInputElement).value;
 
         try {
-            // A função signup do context agora retorna o utilizador criado, mas sem o perfil
             await signup(email, password, {}); // Passamos um perfil vazio inicialmente
             setLoading(false);
             setSignupStep(2);
