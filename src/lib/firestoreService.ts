@@ -16,10 +16,9 @@ import {
   updateDoc,
   runTransaction,
   limit,
-  writeBatch // Importação necessária para transações em lote
+  writeBatch
 } from 'firebase/firestore';
-// ALTERAÇÃO: Importamos os novos tipos
-import type { Listing, CategorySuggestion, ModerationMessage } from './types';
+import type { Listing, CategorySuggestion, ModerationMessage, UserProfile } from './types';
 
 export type SavedListingInfo = {
   id: string;
@@ -32,10 +31,6 @@ export type ConversationInfo = {
     lastMessage: string;
     lastMessageTimestamp: any;
     participantIds: string[];
-};
-
-type UserProfile = {
-    name: string;
 };
 
 type UserDocument = { 
@@ -434,12 +429,6 @@ export const updateCategorySuggestionStatus = async (suggestionId: string, newSt
   }
 };
 
-// --- NOVAS FUNÇÕES PARA O CHAT DE MODERAÇÃO ---
-
-/**
- * Rejeita um anúncio e envia uma mensagem ao utilizador explicando o motivo.
- * Utiliza um 'batch write' para garantir que as duas operações acontecem juntas.
- */
 export const rejectListingWithMessage = async (
   listingId: string,
   adminId: string,
@@ -447,22 +436,16 @@ export const rejectListingWithMessage = async (
 ) => {
   try {
     const batch = writeBatch(db);
-
-    // Operação 1: Atualiza o status do anúncio para 'rejected'
     const listingRef = doc(db, 'listings', listingId);
     batch.update(listingRef, { status: 'rejected', updatedAt: serverTimestamp() });
-
-    // Operação 2: Adiciona a mensagem de moderação na sub-coleção
     const messageRef = doc(collection(listingRef, 'moderationMessages'));
     batch.set(messageRef, {
       text: message,
       senderId: adminId,
-      senderName: 'Administração', // Nome padrão para mensagens do sistema
+      senderName: 'Administração',
       createdAt: serverTimestamp(),
       isRead: false,
     });
-
-    // Executa as duas operações atomicamente
     await batch.commit();
   } catch (error) {
     console.error("Erro ao rejeitar anúncio com mensagem: ", error);
@@ -470,9 +453,6 @@ export const rejectListingWithMessage = async (
   }
 };
 
-/**
- * Busca as mensagens de moderação para um anúncio específico.
- */
 export const getModerationMessages = async (listingId: string): Promise<ModerationMessage[]> => {
   try {
     const messagesRef = collection(db, 'listings', listingId, 'moderationMessages');
@@ -482,5 +462,27 @@ export const getModerationMessages = async (listingId: string): Promise<Moderati
   } catch (error) {
     console.error("Erro ao buscar mensagens de moderação: ", error);
     return [];
+  }
+};
+
+// --- NOVA FUNÇÃO PARA VERIFICAÇÃO DE TELEMÓVEL ---
+/**
+ * Atualiza o perfil de um utilizador para marcar o seu telemóvel como verificado.
+ * @param userId O ID do utilizador a ser atualizado.
+ * @param phoneNumber O número de telemóvel que foi verificado.
+ */
+export const updateUserPhoneVerification = async (userId: string, phoneNumber: string) => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    // Usamos 'updateDoc' para adicionar/modificar campos sem sobrescrever o perfil inteiro
+    // A notação "profile.phoneVerified" atualiza um campo dentro de um objeto (mapa) no Firestore.
+    await updateDoc(userRef, {
+      "profile.phoneVerified": true,
+      "profile.phoneNumber": phoneNumber,
+      "updatedAt": serverTimestamp(),
+    });
+  } catch (error) {
+    console.error("Erro ao atualizar status de verificação do utilizador: ", error);
+    throw new Error("Não foi possível atualizar o perfil com o status de verificação.");
   }
 };

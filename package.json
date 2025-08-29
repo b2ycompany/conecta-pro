@@ -22,7 +22,8 @@
     "react-dom": "^19.0.0",
     "react-dropzone": "^14.3.8",
     "react-imask": "^7.6.1",
-    "react-instantsearch": "^7.16.2"
+    "react-instantsearch": "^7.16.2",
+    "stripe": "^18.5.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

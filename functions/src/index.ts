@@ -1,13 +1,13 @@
 // functions/src/index.ts
 
-// ALTERAÇÃO: Adicionamos esta linha para importar APENAS os tipos do firebase-functions
+// Adicionamos esta linha para importar APENAS os tipos do firebase-functions
 import type * as functions from "firebase-functions";
 
-// O 'require' continua aqui para o código que será executado (runtime)
+// Os 'require' continuam aqui para o código que será executado (runtime)
 const admin = require("firebase-admin");
 const algoliasearch = require("algoliasearch");
-// Renomeamos a variável para evitar conflito com o 'import type'
 const fbFunctions = require("firebase-functions");
+const stripe = require("stripe"); // Adicionamos a biblioteca do Stripe
 
 admin.initializeApp();
 
@@ -18,8 +18,15 @@ const ALGOLIA_INDEX_NAME = process.env.ALGOLIA_INDEX_NAME || "listings";
 const algoliaClient = algoliasearch(ALGOLIA_APP_ID, ALGOLIA_ADMIN_KEY);
 const index = algoliaClient.initIndex(ALGOLIA_INDEX_NAME);
 
+// ALTERAÇÃO: Adicionamos os segredos do Stripe
 const functionOptions = {
-  secrets: ["ALGOLIA_APP_ID", "ALGOLIA_API_KEY", "ALGOLIA_INDEX_NAME"],
+  secrets: [
+    "ALGOLIA_APP_ID",
+    "ALGOLIA_API_KEY",
+    "ALGOLIA_INDEX_NAME",
+    "STRIPE_SECRET_KEY",
+    "STRIPE_WEBHOOK_SECRET",
+  ],
 };
 
 /**
@@ -79,3 +86,52 @@ exports.onListingDeleted = fbFunctions.runWith(functionOptions).firestore
       );
     }
   });
+
+
+// NOVA CLOUD FUNCTION: Webhook para o Stripe
+exports.stripeWebhook = fbFunctions.runWith(functionOptions).https.onRequest(async (req: any, res: any) => {
+  const stripeClient = stripe(process.env.STRIPE_SECRET_KEY);
+  const signature = req.headers["stripe-signature"];
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  let event;
+  try {
+    // Verifica se o pedido veio realmente do Stripe usando a assinatura do webhook
+    event = stripeClient.webhooks.constructEvent(req.rawBody, signature, webhookSecret);
+  } catch (err: any) {
+    fbFunctions.logger.error("Webhook signature verification failed.", err.message);
+    return res.sendStatus(400); // Responde com erro se a assinatura for inválida
+  }
+
+  // Lida com o evento 'checkout.session.completed' que ocorre quando um pagamento é finalizado
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object;
+    const listingId = session.metadata.listingId; // Recupera o ID do anúncio que passamos ao criar a sessão
+
+    if (!listingId) {
+      fbFunctions.logger.error("Erro: listingId não encontrado nos metadados da sessão Stripe.");
+      return res.status(400).send("listingId não encontrado nos metadados.");
+    }
+
+    try {
+      const listingRef = admin.firestore().collection("listings").doc(listingId);
+      
+      // Calcula a data de expiração do destaque (7 dias a partir de agora)
+      const sevenDaysFromNow = new Date();
+      sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
+      
+      // Atualiza o documento do anúncio no Firestore
+      await listingRef.update({
+        isFeatured: true,
+        featuredUntil: admin.firestore.Timestamp.fromDate(sevenDaysFromNow),
+      });
+
+      fbFunctions.logger.log(`Anúncio ${listingId} destacado com sucesso até ${sevenDaysFromNow.toISOString()}.`);
+    } catch (error) {
+      fbFunctions.logger.error(`Erro ao destacar o anúncio ${listingId}:`, error);
+      return res.status(500).send("Erro interno ao atualizar o anúncio.");
+    }
+  }
+
+  res.status(200).send(); // Envia uma resposta de sucesso para o Stripe
+});

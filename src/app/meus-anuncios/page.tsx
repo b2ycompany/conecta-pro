@@ -7,15 +7,16 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { LoaderCircle, ListPlus } from 'lucide-react';
 import { getUserCreatedListings, deleteListing } from '@/lib/firestoreService';
-import type { Listing } from '@/lib/types'; // Import corrigido
+import type { Listing } from '@/lib/types';
 import Link from 'next/link';
-import { MyListingCard } from '@/components/ui/MyListingCard'; // ALTERAÇÃO: Usamos o MyListingCard
+import { MyListingCard } from '@/components/ui/MyListingCard';
 
 export default function MyListingsPage() {
     const { user, isLoading: isAuthLoading } = useAuth();
     const router = useRouter();
     const [myListings, setMyListings] = useState<Listing[]>([]);
     const [isLoadingData, setIsLoadingData] = useState(true);
+    const [isRedirecting, setIsRedirecting] = useState(false); // NOVO ESTADO: para o loading do checkout
 
     const fetchMyListings = useCallback(() => {
         if (user) {
@@ -48,9 +49,45 @@ export default function MyListingsPage() {
             }
         }
     };
+    
+    // NOVA FUNÇÃO: Para lidar com o clique em "Destacar"
+    const handleFeature = async (listingId: string, listingTitle: string) => {
+        setIsRedirecting(true); // Ativa o ecrã de loading
+        try {
+            // Chama a sua API interna para criar a sessão de checkout
+            const response = await fetch('/api/checkout_sessions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ listingId, listingTitle }),
+            });
 
+            if (!response.ok) {
+                throw new Error('Falha ao criar sessão de checkout');
+            }
+
+            const { url } = await response.json();
+            // Redireciona o utilizador para a página de pagamento do Stripe
+            if (url) {
+                window.location.href = url;
+            } else {
+                throw new Error('URL de checkout não recebida.');
+            }
+
+        } catch (error) {
+            console.error("Erro no processo de destaque:", error);
+            alert("Ocorreu um erro ao iniciar o processo de destaque. Por favor, tente novamente.");
+            setIsRedirecting(false); // Desativa o loading em caso de erro
+        }
+    };
+    
+    // Mostra uma mensagem de loading durante o processo de autenticação ou busca de dados
     if (isLoadingData || isAuthLoading) {
         return <div className="min-h-screen flex justify-center items-center"><LoaderCircle size={48} className="animate-spin text-blue-600"/></div>
+    }
+
+    // Mostra um ecrã de loading específico para o redirecionamento para o Stripe
+    if (isRedirecting) {
+        return <div className="min-h-screen flex flex-col justify-center items-center gap-4"><LoaderCircle size={48} className="animate-spin text-blue-600"/> <p className="text-lg text-text-secondary">A redirecionar para o pagamento...</p></div>
     }
 
     return (
@@ -68,11 +105,11 @@ export default function MyListingsPage() {
             {myListings.length > 0 ? (
                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     {myListings.map(listing => (
-                        // ALTERAÇÃO: Renderizamos o MyListingCard que contém toda a lógica de status e ações
                         <MyListingCard 
                             key={listing.id} 
                             listing={listing} 
                             onDelete={handleDelete}
+                            onFeature={handleFeature} // Passamos a nova função para o componente filho
                         />
                     ))}
                 </div>

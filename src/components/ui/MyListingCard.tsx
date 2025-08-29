@@ -4,18 +4,19 @@
 
 import { useState } from 'react';
 import { ListingCard } from './ListingCard';
-import type { Listing } from '@/lib/types'; // Import corrigido para usar os tipos globais
+import type { Listing } from '@/lib/types';
 import { getModerationMessages } from '@/lib/firestoreService';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MoreVertical, Edit, Trash2, Clock, CheckCircle2, XCircle, MessageSquareWarning } from 'lucide-react';
+import { MoreVertical, Edit, Trash2, Clock, CheckCircle2, XCircle, MessageSquareWarning, Star } from 'lucide-react'; // Importamos o ícone Star
 import Link from 'next/link';
 
 interface MyListingCardProps {
   listing: Listing;
   onDelete: (listingId: string, listingTitle: string) => void;
+  onFeature: (listingId: string, listingTitle: string) => void; // NOVA PROP: Função para iniciar o destaque
 }
 
-export function MyListingCard({ listing, onDelete }: MyListingCardProps) {
+export function MyListingCard({ listing, onDelete, onFeature }: MyListingCardProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const handleDeleteClick = (e: React.MouseEvent) => {
@@ -28,15 +29,13 @@ export function MyListingCard({ listing, onDelete }: MyListingCardProps) {
   const handleEditClick = (e: React.MouseEvent) => {
     e.stopPropagation();
   };
-
-  // ALTERAÇÃO: Mostra o feedback do admin
+  
   const handleShowFeedback = async (e: React.MouseEvent) => {
     e.stopPropagation(); 
     e.preventDefault();
     try {
         const messages = await getModerationMessages(listing.id);
         if (messages.length > 0) {
-          // Usamos um 'alert' simples. No futuro, isto pode ser um modal mais elegante.
           alert(`Feedback da Moderação:\n\n"${messages[0].text}"`);
         } else {
           alert("Nenhum feedback encontrado.");
@@ -54,12 +53,13 @@ export function MyListingCard({ listing, onDelete }: MyListingCardProps) {
   const currentStatus = statusInfo[listing.status] || statusInfo.pending;
   const IconComponent = currentStatus.icon;
 
+  // Mostra o botão "Destacar" apenas se o anúncio estiver 'aprovado' e ainda não for 'destacado'
+  const isFeatureable = listing.status === 'approved' && !listing.isFeatured;
+
   return (
     <div className="relative bg-white rounded-lg shadow-sm border border-border flex flex-col h-full overflow-hidden">
-      {/* O cartão do anúncio. Clicar nele leva para a página de detalhe. */}
       <ListingCard listing={listing} />
       
-      {/* ALTERAÇÃO: Barra de Status e Feedback */}
       <div className={`p-2 flex justify-between items-center text-sm font-medium border-t ${currentStatus.color}`}>
         <div className="flex items-center gap-2">
             <IconComponent size={16} />
@@ -72,7 +72,27 @@ export function MyListingCard({ listing, onDelete }: MyListingCardProps) {
         )}
       </div>
 
-      {/* Botão do Menu de Opções (Kebab Menu) */}
+      {/* NOVA BARRA DE AÇÕES: Contém os botões de Editar e Destacar */}
+      <div className="flex border-t border-border">
+          <Link 
+              href={`/anuncios/editar/${listing.id}`} 
+              onClick={handleEditClick}
+              className="flex-1 flex items-center justify-center gap-2 p-3 text-sm font-medium text-text-secondary hover:bg-gray-50 transition-colors"
+          >
+              <Edit size={14} /> Editar
+          </Link>
+          {/* Botão de Destaque Condicional */}
+          {isFeatureable && (
+              <button 
+                  onClick={() => onFeature(listing.id, listing.title)}
+                  className="flex-1 flex items-center justify-center gap-2 p-3 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors border-l border-border"
+              >
+                  <Star size={14} /> Destacar
+              </button>
+          )}
+      </div>
+
+      {/* Botão do Menu de Opções (Kebab Menu) - Agora apenas para Excluir */}
       <div className="absolute top-2 right-2 z-10">
         <button 
           onClick={(e) => {
@@ -85,8 +105,6 @@ export function MyListingCard({ listing, onDelete }: MyListingCardProps) {
         >
           <MoreVertical size={20} className="text-text-primary" />
         </button>
-
-        {/* O Menu Dropdown */}
         <AnimatePresence>
           {isMenuOpen && (
             <motion.div
@@ -97,15 +115,6 @@ export function MyListingCard({ listing, onDelete }: MyListingCardProps) {
               className="absolute right-0 mt-2 w-40 bg-white rounded-md shadow-lg border border-border z-20"
             >
               <ul>
-                <li>
-                  <Link 
-                    href={`/anuncios/editar/${listing.id}`} 
-                    onClick={handleEditClick}
-                    className="w-full text-left px-4 py-2 text-sm text-text-primary hover:bg-gray-100 flex items-center gap-2"
-                  >
-                    <Edit size={14} /> Editar
-                  </Link>
-                </li>
                 <li>
                   <button 
                     onClick={handleDeleteClick}

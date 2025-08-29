@@ -12,21 +12,23 @@ import {
   signInWithEmailAndPassword
 } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { saveUserProfile } from '@/lib/firestoreService';
+import type { UserProfile } from '@/lib/types'; // Importamos o nosso novo tipo
 
-// O nosso tipo de Utilizador agora inclui o perfil completo e a role de admin
+// O tipo de Utilizador agora inclui o perfil completo
 interface AppUser extends User {
   name?: string;
-  profile?: any;
+  profile?: UserProfile; // Usamos o tipo UserProfile
   isAdmin?: boolean;
 }
 
-// O tipo do contexto agora inclui a informação de admin
+// O tipo do contexto agora inclui a nova informação
 interface AuthContextType {
   user: AppUser | null;
   isLoading: boolean;
   isAdmin: boolean;
+  isPhoneVerified: boolean; // NOVO: Status de verificação
   login: (email: string, pass: string) => Promise<User>;
   signup: (email: string, pass: string, profileData: any) => Promise<User>;
   logout: () => Promise<void>;
@@ -37,6 +39,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<AppUser | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isPhoneVerified, setIsPhoneVerified] = useState(false); // NOVO estado
   const [isLoading, setIsLoading] = useState(true);
   const authInstance = getAuth();
 
@@ -46,10 +49,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const userDocRef = doc(db, 'users', firebaseUser.uid);
         let docSnap = await getDoc(userDocRef);
 
-        // ALTERAÇÃO: Se o perfil não existir, cria um básico!
         if (!docSnap.exists()) {
           console.log(`Perfil não encontrado para o utilizador ${firebaseUser.uid}. A criar perfil padrão...`);
-          const defaultProfile = { name: firebaseUser.email?.split('@')[0] || 'Novo Utilizador', email: firebaseUser.email };
+          const defaultProfile: UserProfile = { 
+            name: firebaseUser.email?.split('@')[0] || 'Novo Utilizador', 
+            email: firebaseUser.email || '' 
+          };
           await saveUserProfile(firebaseUser.uid, defaultProfile);
           docSnap = await getDoc(userDocRef); // Re-busca o documento recém-criado
         }
@@ -64,9 +69,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         setUser(appUser);
         setIsAdmin(appUser.isAdmin || false);
+        // NOVO: Definimos o estado de verificação com base nos dados do perfil
+        setIsPhoneVerified(userData?.profile?.phoneVerified === true);
       } else {
         setUser(null);
         setIsAdmin(false);
+        setIsPhoneVerified(false); // NOVO: Resetamos o estado ao fazer logout
       }
       setIsLoading(false);
     });
@@ -82,7 +90,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signup = async (email: string, pass: string, profileData: any) => {
     const userCredential = await createUserWithEmailAndPassword(authInstance, email, pass);
     const firebaseUser = userCredential.user;
-    await saveUserProfile(firebaseUser.uid, profileData);
+    // Garante que o email está incluído no perfil ao registar-se
+    const completeProfileData: UserProfile = { ...profileData, email };
+    await saveUserProfile(firebaseUser.uid, completeProfileData);
     return firebaseUser;
   };
 
@@ -91,7 +101,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, isAdmin, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, isAdmin, isPhoneVerified, login, signup, logout }}>
       {children}
     </AuthContext.Provider>
   );
