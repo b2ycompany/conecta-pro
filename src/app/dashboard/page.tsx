@@ -7,11 +7,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { LoaderCircle, MessageSquare, Bookmark, List, TrendingUp, Briefcase, ArrowRight } from 'lucide-react';
+import { LoaderCircle, MessageSquare, Bookmark, List } from 'lucide-react';
 import { getUserConversas, type ConversationInfo, getUserSavedListings, type SavedListingInfo, getUserCreatedListings } from '@/lib/firestoreService';
-import type { Listing } from '@/lib/mockData';
+// CORREÇÃO: Alteramos a importação para usar a nossa fonte única da verdade para os tipos.
+import type { Listing } from '@/lib/types';
 import { formatCurrency } from '@/lib/formatters';
-import Image from 'next/image'; // LINHA ADICIONADA PARA CORRIGIR O ERRO
+import Image from 'next/image';
 
 export default function DashboardPage() {
   const { user, isLoading: isAuthLoading } = useAuth();
@@ -28,7 +29,6 @@ export default function DashboardPage() {
     if (user) {
       const fetchDashboardData = async () => {
         try {
-          // Usamos Promise.all para buscar todos os dados em paralelo
           const [saved, convos, created] = await Promise.all([
             getUserSavedListings(user.uid),
             getUserConversas(user.uid),
@@ -60,12 +60,9 @@ export default function DashboardPage() {
         <p className="text-lg text-text-secondary mt-2">Bem-vindo de volta, {user?.displayName || user?.email}!</p>
       </motion.div>
 
-      {/* Layout de duas colunas */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-10">
         
-        {/* Coluna Principal */}
         <div className="lg:col-span-2 space-y-8">
-          {/* Widget: Meus Anúncios */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.1 } }} className="bg-white p-6 rounded-lg shadow-sm border border-border">
             <h2 className="text-xl font-bold text-text-primary mb-4 flex items-center gap-2"><List className="text-blue-600"/> Meus Anúncios Publicados</h2>
             <div className="space-y-3">
@@ -76,7 +73,7 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <p className="font-semibold text-text-primary truncate">{item.title}</p>
-                    <p className="text-sm text-blue-600 font-semibold">{formatCurrency(item.price)}</p>
+                    <p className="text-sm text-blue-600 font-semibold">{formatCurrency(Number(item.price))}</p>
                   </div>
                 </Link>
               )) : <p className="text-sm text-text-secondary">Você ainda não publicou nenhum anúncio.</p>}
@@ -84,7 +81,6 @@ export default function DashboardPage() {
             <Link href="/meus-anuncios" className="text-sm font-semibold text-blue-600 mt-4 block">Ver todos os meus anúncios →</Link>
           </motion.div>
 
-          {/* Widget: Mensagens */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.2 } }} className="bg-white p-6 rounded-lg shadow-sm border border-border">
              <h2 className="text-xl font-bold text-text-primary mb-4 flex items-center gap-2"><MessageSquare className="text-blue-600"/> Mensagens Recentes</h2>
              <div className="space-y-3">
@@ -100,7 +96,6 @@ export default function DashboardPage() {
           </motion.div>
         </div>
 
-        {/* Coluna Lateral */}
         <div className="lg:col-span-1 space-y-8">
            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.3 } }} className="bg-white p-6 rounded-lg shadow-sm border border-border">
             <h2 className="text-xl font-bold text-text-primary mb-4 flex items-center gap-2"><Bookmark className="text-blue-600"/> Anúncios Salvos</h2>
