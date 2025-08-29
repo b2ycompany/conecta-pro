@@ -2,9 +2,9 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react'; // Adicionado Suspense
 import { useAuth } from '@/contexts/AuthContext';
-import { useRouter, useSearchParams } from 'next/navigation'; // Adicionado useSearchParams
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, LoaderCircle, UploadCloud, XCircle, ArrowLeft, CheckCircle, Sparkles, Building, Briefcase } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
@@ -44,10 +44,11 @@ const initialFormData: FormData = {
   monthlyCosts: { rent: '', utilities: '', payroll: '', others: '' }
 };
 
-export default function NewListingPage() {
+// CORREÇÃO: Toda a lógica do formulário foi movida para este componente interno
+function NewListingForm() {
   const router = useRouter();
-  const searchParams = useSearchParams(); // Hook para ler parâmetros da URL
-  const { user } = useAuth();
+  const searchParams = useSearchParams(); // Agora está dentro de um componente que é filho do Suspense
+  const { user, isLoading: isAuthLoading } = useAuth(); // Adicionado isLoading para uma melhor UX
   
   const [selectedCategory, setSelectedCategory] = useState<Category>(null);
   const [formData, setFormData] = useState<FormData>(initialFormData);
@@ -56,8 +57,23 @@ export default function NewListingPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [submissionSuccess, setSubmissionSuccess] = useState<string | null>(null);
 
-  // CORREÇÃO: Busca CEP agora preenche todos os campos do formulário
   const debouncedCep = useDebounce(formData.location?.cep || '', 500);
+
+  // Lógica para pré-selecionar categoria e re-hidratar dados do localStorage
+  useEffect(() => {
+    const preselectedCategory = searchParams.get('category');
+    if (preselectedCategory && !selectedCategory) {
+      const category = mainCategories.find(c => c.id === preselectedCategory);
+      if (category) setSelectedCategory(category);
+    }
+
+    const pendingData = localStorage.getItem('pendingListingData');
+    if (pendingData) {
+      setFormData(JSON.parse(pendingData));
+      localStorage.removeItem('pendingListingData');
+    }
+  }, [searchParams, selectedCategory]);
+
   useEffect(() => {
     const cepDigits = debouncedCep.replace(/\D/g, '');
     if (cepDigits.length === 8) {
@@ -65,36 +81,11 @@ export default function NewListingPage() {
         .then(res => res.json())
         .then(data => {
           if (!data.erro) {
-            setFormData(prev => ({ 
-                ...prev, 
-                location: { 
-                    ...prev.location, 
-                    address: data.logradouro, 
-                    city: data.localidade, 
-                    state: data.uf 
-                }
-            }));
+            setFormData((prev) => ({ ...prev, location: { ...prev.location, address: data.logradouro, city: data.localidade, state: data.uf } }));
           }
         });
     }
   }, [debouncedCep]);
-
-  // NOVO: Lógica para pré-selecionar a categoria e re-hidratar o formulário após o login
-  useEffect(() => {
-    // Se a categoria foi passada na URL, seleciona-a
-    const preselectedCategory = searchParams.get('category');
-    if (preselectedCategory && !selectedCategory) {
-      const category = mainCategories.find(c => c.id === preselectedCategory);
-      if (category) setSelectedCategory(category);
-    }
-
-    // Se houver dados de anúncio pendentes no localStorage, carrega-os
-    const pendingData = localStorage.getItem('pendingListingData');
-    if (pendingData) {
-      setFormData(JSON.parse(pendingData));
-      localStorage.removeItem('pendingListingData'); // Limpa para não carregar de novo
-    }
-  }, [searchParams, selectedCategory]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -154,17 +145,13 @@ export default function NewListingPage() {
     }
   };
 
-  // CORREÇÃO: Botão "Publicar" agora funcional e com fluxo imersivo
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCategory) return alert("Erro: Categoria não selecionada.");
 
-    // NOVO: Verifica se o utilizador está logado ANTES de tentar submeter
     if (!user) {
       alert("Para publicar, por favor, faça login ou crie uma conta. O seu anúncio será guardado.");
-      // Guarda os dados atuais no localStorage
       localStorage.setItem('pendingListingData', JSON.stringify(formData));
-      // Redireciona para o login, informando para onde voltar depois
       router.push(`/login?redirect=/anuncios/novo&category=${selectedCategory.id}`);
       return;
     }
@@ -181,13 +168,7 @@ export default function NewListingPage() {
           return uploadBytesResumable(storageRef, file).then(() => getDownloadURL(storageRef));
         })
       );
-      const dataToSave = { 
-          ...formData, 
-          category: selectedCategory.id, 
-          categoryName: selectedCategory.name,
-          imageUrl: imageUrls[0], 
-          gallery: imageUrls 
-      };
+      const dataToSave = { ...formData, category: selectedCategory.id, categoryName: selectedCategory.name, imageUrl: imageUrls[0], gallery: imageUrls };
       const newListingId = await createListing(user.uid, dataToSave);
       setSubmissionSuccess(newListingId);
     } catch (error) {
@@ -197,6 +178,11 @@ export default function NewListingPage() {
       setIsSubmitting(false);
     }
   };
+
+  // Se a autenticação ainda está a ser verificada, mostra um loader geral
+  if (isAuthLoading && !user) {
+    return <div className="min-h-screen flex justify-center items-center"><LoaderCircle size={48} className="animate-spin text-blue-600" /></div>;
+  }
   
   if (submissionSuccess) {
     return (
@@ -270,7 +256,6 @@ export default function NewListingPage() {
                 
                 <div>
                   <p className="font-semibold text-xl mb-4">Localização</p>
-                  {/* CORREÇÃO: Layout do formulário de localização melhorado */}
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pl-2 border-l-2 border-blue-200">
                     <div className="md:col-span-1"><label>CEP</label><IMaskInput mask="00000-000" value={formData.location.cep} onAccept={(v)=>handleInputChange({target:{name:'location.cep',value:v}} as any)} className="w-full mt-1 p-2 border rounded-md"/></div>
                     <div className="md:col-span-3"><label>Rua</label><input value={formData.location.address || ''} disabled className="w-full mt-1 p-2 border rounded-md bg-gray-100"/></div>
@@ -324,5 +309,14 @@ export default function NewListingPage() {
         </AnimatePresence>
       </div>
     </div>
+  );
+}
+
+// CORREÇÃO: A página exportada agora envolve o formulário com <Suspense>
+export default function NewListingPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex justify-center items-center"><LoaderCircle size={48} className="animate-spin text-blue-600"/></div>}>
+      <NewListingForm />
+    </Suspense>
   );
 }

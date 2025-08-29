@@ -14,6 +14,8 @@ import { LoaderCircle, Building, DollarSign, MapPin, Users, Percent, Phone, Mess
 import type { Listing } from '@/lib/types';
 import { saveListingForUser, removeSavedListing, isListingSaved, getOrCreateConversation } from '@/lib/firestoreService';
 import { formatCurrency, formatPercentage } from '@/lib/formatters';
+// ALTERAÇÃO: Importamos o nosso novo componente de botão protegido
+import ProtectedActionButton from '@/components/ProtectedActionButton';
 
 // Função auxiliar para converter strings (ex: "25,50") para números (ex: 25.50)
 const parseNumericString = (value: string | number | undefined): number => {
@@ -28,7 +30,6 @@ const parseNumericString = (value: string | number | undefined): number => {
 
 // Componente para detalhes de Negócios
 const BusinessDetails = ({ listing }: { listing: Listing }) => {
-  // CORREÇÃO: Convertemos os valores para número antes de formatar
   const annualRevenue = parseNumericString(listing.annualRevenue);
   const profitMargin = parseNumericString(listing.profitMargin);
 
@@ -42,7 +43,6 @@ const BusinessDetails = ({ listing }: { listing: Listing }) => {
         </div>
         <div className="bg-gray-50 p-4 rounded-lg">
             <p className="text-sm text-text-secondary">Margem de Lucro</p>
-            {/* O formatador de percentagem espera um decimal (ex: 0.25 para 25%) */}
             <p className="text-xl font-bold text-blue-600">{!isNaN(profitMargin) ? formatPercentage(profitMargin / 100) : 'N/A'}</p>
         </div>
         <div className="bg-gray-50 p-4 rounded-lg">
@@ -116,7 +116,10 @@ export default function ListingDetailPage() {
   }, [user, listing]);
 
   const handleSaveToggle = async () => {
+    // A verificação de 'user' agora é feita pelo ProtectedActionButton,
+    // mas mantemos aqui por segurança caso esta função seja chamada de outro lugar.
     if (!user || !listing) return;
+    
     setIsSaving(true);
     try {
       if (isSaved) {
@@ -133,23 +136,21 @@ export default function ListingDetailPage() {
     }
   };
 
-  const handleActionClick = async (action: 'chat' | 'phone' | 'save') => {
-    if (!user) {
-        alert('Para realizar esta ação, por favor, crie uma conta ou faça login.');
-        router.push('/login');
-        return;
+  // ALTERAÇÃO: Funções específicas para cada ação, que serão passadas ao botão protegido.
+  const handleStartChat = async () => {
+    if (!user || !listing || !listing.ownerId) return;
+    try {
+        const conversationId = await getOrCreateConversation(listing.id, listing.ownerId, user.uid);
+        router.push(`/mensagens/${conversationId}`);
+    } catch (error) {
+        alert("Não foi possível iniciar a conversa.");
     }
-    if (action === 'chat') {
-        if (!listing || !listing.ownerId) return;
-        try {
-            const conversationId = await getOrCreateConversation(listing.id, listing.ownerId, user.uid);
-            router.push(`/mensagens/${conversationId}`);
-        } catch (error) {
-            alert("Não foi possível iniciar a conversa.");
-        }
-    } else if (action === 'save') {
-        handleSaveToggle();
-    }
+  };
+
+  const handleShowPhone = () => {
+    if (!user || !listing) return;
+    // Lógica para mostrar o telefone, que pode estar no perfil do anunciante
+    alert("Funcionalidade de ver telefone a ser implementada.");
   };
 
   const formatLocation = (location: any): string => {
@@ -222,22 +223,25 @@ export default function ListingDetailPage() {
               <div className="bg-white p-6 rounded-lg shadow-sm border border-border sticky top-24">
                 <p className="text-text-secondary text-lg">Valor de Venda</p>
                 <p className="text-4xl font-extrabold text-blue-600 mb-6">{!isNaN(numericPrice) ? formatCurrency(numericPrice) : 'A consultar'}</p>
+                
+                {/* ALTERAÇÃO: Substituímos os botões normais pelos ProtectedActionButtons */}
                 <div className="space-y-3">
-                  <button onClick={() => handleActionClick('chat')} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2">
+                  <ProtectedActionButton onClick={handleStartChat} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2">
                     <MessageSquare/> Enviar Mensagem
-                  </button>
-                  <button onClick={() => handleActionClick('phone')} className="w-full bg-gray-100 hover:bg-gray-200 text-text-primary font-bold py-3 rounded-lg flex items-center justify-center gap-2">
+                  </ProtectedActionButton>
+                  <ProtectedActionButton onClick={handleShowPhone} className="w-full bg-gray-100 hover:bg-gray-200 text-text-primary font-bold py-3 rounded-lg flex items-center justify-center gap-2">
                     <Phone/> Ver Telefone
-                  </button>
-                  <button 
-                    onClick={() => handleActionClick('save')} 
+                  </ProtectedActionButton>
+                  <ProtectedActionButton 
+                    onClick={handleSaveToggle} 
                     disabled={isSaving}
                     className={`w-full border-2 font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all ${ isSaved ? 'bg-green-600 text-white border-transparent' : 'border-gray-300 hover:bg-gray-50 text-gray-600' }`}
                   >
                     {isSaving ? <LoaderCircle className="animate-spin" /> : <Bookmark/>}
                     {isSaved ? 'Salvo!' : 'Salvar Anúncio'}
-                  </button>
+                  </ProtectedActionButton>
                 </div>
+
               </div>
             </div>
           </div>

@@ -10,8 +10,6 @@ import { InteractiveSplashScreen } from '@/components/layout/InteractiveSplashSc
 import { Rocket, ShoppingCart, DollarSign, ArrowLeft, PlusCircle } from 'lucide-react';
 import { mainCategories } from '@/lib/categories';
 import { useSplashScreen } from '@/contexts/SplashScreenContext';
-// ALTERAÇÃO: Importamos o Modal e a nova função do serviço
-// Nota: Certifique-se de que este componente existe ou crie um.
 import { SuggestionModal } from '@/components/ui/SuggestionModal'; 
 import { submitCategorySuggestion } from '@/lib/firestoreService';
 
@@ -25,8 +23,6 @@ export default function HomePage() {
   const { hasSplashScreenBeenShown, setSplashScreenShown } = useSplashScreen();
   const [animationState, setAnimationState] = useState<'splash' | 'transitioning' | 'ready'>('splash');
   const [view, setView] = useState<'journeys' | 'buy' | 'sell' | 'invest'>('journeys');
-  
-  // ALTERAÇÃO: Novo estado para controlar o modal
   const [isSuggestionModalOpen, setIsSuggestionModalOpen] = useState(false);
   
   const router = useRouter();
@@ -39,25 +35,26 @@ export default function HomePage() {
   }, [hasSplashScreenBeenShown]);
 
   const handleJourneyClick = (journeyId: 'buy' | 'sell' | 'invest') => {
-    setView(journeyId);
+    // Para Vender, vamos direto para a página de criação, seguindo o fluxo imersivo
+    if (journeyId === 'sell') {
+        router.push('/anuncios/novo');
+    } else {
+        setView(journeyId);
+    }
   };
   
   const handleCategoryClick = (categoryId: string) => {
+    // Para comprar e investir, o utilizador anónimo pode navegar
     if (view === 'buy' || view === 'invest') {
       router.push(`/comprar/${categoryId}`);
-    } else if (view === 'sell') {
-      if (user) {
-        router.push(`/anuncios/novo?category=${categoryId}`);
-      } else {
-        router.push(`/login?journey=sell&category=${categoryId}`);
-      }
-    }
+    } 
+    // A jornada de venda já é tratada no handleJourneyClick
   };
 
-  // ALTERAÇÃO: Nova função para lidar com o envio da sugestão
   const handleSuggestionSubmit = async (categoryName: string, description: string) => {
     if (!user || !user.name) {
       alert("Você precisa estar logado para sugerir uma categoria.");
+      // Podemos melhorar isto redirecionando com contexto, mas por agora um alert é suficiente.
       router.push('/login');
       return;
     }
@@ -66,10 +63,10 @@ export default function HomePage() {
         categoryName,
         description,
         userId: user.uid,
-        userName: user.name, // Assumindo que o nome do utilizador está disponível em user.name
+        userName: user.name, // Assumindo que o nome do utilizador está disponível no objeto 'user'
       });
       alert("Sugestão enviada com sucesso! Obrigado por contribuir.");
-      setIsSuggestionModalOpen(false); // Fecha o modal após o sucesso
+      setIsSuggestionModalOpen(false);
     } catch (error) {
       alert("Ocorreu um erro ao enviar a sua sugestão.");
     }
@@ -119,18 +116,7 @@ export default function HomePage() {
                                            <h3 className="text-sm font-semibold text-text-primary">{category.name}</h3>
                                        </motion.div>
                                     ))}
-                                    {/* ALTERAÇÃO: O cartão "Não encontrou?" agora abre o modal */}
-                                    {view === 'sell' && (
-                                       <motion.div 
-                                        onClick={() => setIsSuggestionModalOpen(true)}
-                                        className="group cursor-pointer p-4 text-center bg-gray-50 border-2 border-dashed border-gray-300 rounded-2xl hover:border-blue-600 hover:bg-white flex flex-col justify-center items-center transition-colors"
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0, transition: { duration: 0.5, delay: categoriesToShow.length * 0.05 } }}
-                                       >
-                                           <PlusCircle className="h-8 w-8 text-gray-400 mb-3 mx-auto transition-colors group-hover:text-blue-600" />
-                                           <h3 className="text-sm font-semibold text-text-secondary">Não encontrou?</h3>
-                                       </motion.div>
-                                    )}
+                                    {/* O botão de sugestão pode aparecer na jornada de Venda, se desejar */}
                                 </div>
                             </motion.div>
                         )}
@@ -141,10 +127,8 @@ export default function HomePage() {
     );
   };
 
-  // Precisamos de renderizar o Modal fora do switch para que ele possa ser exibido
   return (
     <>
-      {/* Lógica do switch para renderizar splash/transição/conteúdo */}
       {(() => {
         switch (animationState) {
           case 'splash': return <InteractiveSplashScreen key="splash" onAnimationComplete={() => setAnimationState('transitioning')} />;
@@ -154,7 +138,6 @@ export default function HomePage() {
         }
       })()}
 
-      {/* O Modal de Sugestão é renderizado aqui, por cima de tudo */}
       <SuggestionModal 
         isOpen={isSuggestionModalOpen}
         onClose={() => setIsSuggestionModalOpen(false)}

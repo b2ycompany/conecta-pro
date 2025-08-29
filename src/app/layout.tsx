@@ -7,7 +7,6 @@ import { Header } from "@/components/layout/Header";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { FloatingContactButton } from "@/components/ui/FloatingContactButton";
 import Footer from "@/components/layout/Footer";
-// ALTERAÇÃO: Importamos o nosso novo Provider
 import { SplashScreenProvider } from "@/contexts/SplashScreenContext";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -26,7 +25,6 @@ export default function RootLayout({
     <html lang="pt-br">
       <body className={`${inter.className} flex flex-col min-h-screen`}>
         <AuthProvider>
-          {/* ALTERAÇÃO: O SplashScreenProvider envolve tudo */}
           <SplashScreenProvider>
             <Header />
             <main className="flex-grow">

@@ -8,7 +8,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { Briefcase, LogIn, User, LogOut, ChevronDown, Bell, Menu, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-// ALTERAÇÃO: Importamos as categorias para exibir no menu
 import { mainCategories } from '@/lib/categories';
 
 const navCategories = mainCategories.slice(0, 4); // Pega as 4 primeiras para o menu principal
@@ -37,7 +36,6 @@ export function Header() {
             <span>B2Y Sales</span>
           </Link>
 
-          {/* ALTERAÇÃO: Menu de Navegação redesenhado com categorias */}
           <nav className="hidden md:flex gap-8 items-center">
             {navCategories.map(cat => (
               <Link key={cat.id} href={`/comprar/${cat.id}`} className="text-sm font-medium text-text-secondary hover:text-blue-600 transition-colors">
@@ -78,7 +76,8 @@ export function Header() {
               ) : (
                 <>
                   <Link href="/login" className="text-sm font-medium text-text-secondary hover:text-blue-600">Login</Link>
-                  <Link href="/login?journey=sell" className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-md shadow-sm">Anunciar Grátis</Link>
+                  {/* Para uma experiência 100% imersiva, este link poderia apontar para /anuncios/novo */}
+                  <Link href="/anuncios/novo" className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-md shadow-sm">Anunciar Grátis</Link>
                 </>
               )}
             </div>
@@ -91,7 +90,7 @@ export function Header() {
           </div>
         </div>
       </div>
-      {/* ALTERAÇÃO: Menu Mobile que desliza de cima */}
+      {/* Menu Mobile que desliza de cima */}
       <AnimatePresence>
         {isMobileMenuOpen && (
             <motion.div 
@@ -102,7 +101,6 @@ export function Header() {
             >
                 <nav className="flex flex-col p-4 gap-4">
                     {mainCategories.map(cat => (
-                        // Mostra apenas categorias que fazem sentido em algum fluxo
                         cat.journeys.length > 0 &&
                         <Link key={cat.id} href={`/comprar/${cat.id}`} onClick={() => setIsMobileMenuOpen(false)} className="font-medium text-text-secondary hover:text-blue-600">{cat.name}</Link>
                     ))}
