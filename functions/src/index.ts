@@ -135,3 +135,79 @@ exports.stripeWebhook = fbFunctions.runWith(functionOptions).https.onRequest(asy
 
   res.status(200).send(); // Envia uma resposta de sucesso para o Stripe
 });
+
+
+// --- NOVAS FUNÇÕES PARA A DASHBOARD DE ADMIN ---
+
+/**
+ * Trigger executado quando um novo utilizador é criado no Firestore.
+ * Atualiza o contador total de utilizadores.
+ */
+exports.onUserCreated = fbFunctions.firestore
+  .document("users/{userId}")
+  .onCreate(async () => {
+    // Referência para o nosso documento de estatísticas na coleção 'stats' e documento 'summary'
+    const statsRef = admin.firestore().doc("stats/summary");
+    
+    // Incrementa o campo 'userCount' em 1.
+    // FieldValue.increment() é uma operação atómica, o que garante que o valor seja sempre
+    // incrementado corretamente, mesmo com várias execuções simultâneas.
+    return statsRef.update({ 
+      userCount: admin.firestore.FieldValue.increment(1) 
+    });
+  });
+
+/**
+ * Trigger executado quando um anúncio é atualizado no Firestore.
+ * Útil para contar anúncios que mudam de status (ex: de 'pending' para 'approved').
+ */
+exports.onListingUpdatedForStats = fbFunctions.firestore
+  .document("listings/{listingId}")
+  .onUpdate(async (change: functions.Change<functions.firestore.QueryDocumentSnapshot>) => {
+    const beforeData = change.before.data();
+    const afterData = change.after.data();
+    const statsRef = admin.firestore().doc("stats/summary");
+
+    // Cenário 1: Anúncio foi APROVADO
+    // Se o status ANTES não era 'approved' e AGORA é 'approved'
+    if (beforeData.status !== "approved" && afterData.status === "approved") {
+      // Incrementa o contador de anúncios aprovados
+      return statsRef.update({ 
+        approvedListingCount: admin.firestore.FieldValue.increment(1) 
+      });
+    }
+
+    // Cenário 2: Um anúncio aprovado foi REJEITADO ou ARQUIVADO
+    // Se o status ANTES era 'approved' e AGORA NÃO é 'approved'
+    if (beforeData.status === "approved" && afterData.status !== "approved") {
+      // Decrementa o contador de anúncios aprovados
+      return statsRef.update({
+        approvedListingCount: admin.firestore.FieldValue.increment(-1)
+      });
+    }
+
+    // Se não houve mudança de status relevante para os contadores, a função termina sem fazer nada.
+    return null;
+  });
+
+/**
+ * Trigger executado quando um anúncio é APAGADO do Firestore.
+ * Garante que os contadores permanecem corretos.
+ */
+exports.onListingDeletedForStats = fbFunctions.firestore
+  .document("listings/{listingId}")
+  .onDelete(async (snapshot: functions.firestore.QueryDocumentSnapshot) => {
+    const deletedListing = snapshot.data();
+    
+    // Se o anúncio que foi apagado estava com o status 'approved'
+    if (deletedListing.status === "approved") {
+      const statsRef = admin.firestore().doc("stats/summary");
+      // Decrementa o contador de anúncios aprovados
+      return statsRef.update({
+        approvedListingCount: admin.firestore.FieldValue.increment(-1)
+      });
+    }
+
+    // Se o anúncio apagado não estava aprovado, ele não afeta o contador, então não fazemos nada.
+    return null;
+  });

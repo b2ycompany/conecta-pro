@@ -1,14 +1,18 @@
 // src/lib/types.ts
 import { Timestamp } from "firebase/firestore";
 
-// NOVO TIPO ADICIONADO E EXPORTADO
+// TIPO ATUALIZADO: Adicionados campos de morada completa
 export type UserProfile = {
   name: string;
   email: string;
   profileType?: string;
   document?: string;
   phone?: string;
-  // CAMPOS DE VERIFICAÇÃO ADICIONADOS
+  cep?: string;         // CAMPO ADICIONADO
+  address?: string;     // CAMPO ADICIONADO
+  number?: string;      // CAMPO ADICIONADO
+  city?: string;        // CAMPO ADICIONADO
+  state?: string;       // CAMPO ADICIONADO
   phoneVerified?: boolean;
   phoneNumber?: string; // Para guardar o número que foi verificado
 };

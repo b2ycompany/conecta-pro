@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation'; // Adicionado useSearchParams
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, LoaderCircle, UploadCloud, XCircle, ArrowLeft, CheckCircle, Sparkles, Building, Briefcase } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
@@ -18,7 +18,6 @@ import { mainCategories } from '@/lib/categories';
 // --- TIPOS DE DADOS ---
 type Category = typeof mainCategories[0] | null;
 
-// TIPO ADICIONADO PARA GARANTIR A SEGURANÇA DOS DADOS DO FORMULÁRIO
 type FormData = {
   listingType?: 'business_sale' | 'investment_seek';
   title?: string;
@@ -37,7 +36,7 @@ type FormData = {
     payroll: string;
     others: string;
   };
-  [key: string]: any; // Permite outros campos dinâmicos de categorias
+  [key: string]: any;
 };
 
 const initialFormData: FormData = {
@@ -47,7 +46,8 @@ const initialFormData: FormData = {
 
 export default function NewListingPage() {
   const router = useRouter();
-  const { user, isLoading: isAuthLoading } = useAuth();
+  const searchParams = useSearchParams(); // Hook para ler parâmetros da URL
+  const { user } = useAuth();
   
   const [selectedCategory, setSelectedCategory] = useState<Category>(null);
   const [formData, setFormData] = useState<FormData>(initialFormData);
@@ -56,15 +56,8 @@ export default function NewListingPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [submissionSuccess, setSubmissionSuccess] = useState<string | null>(null);
 
+  // CORREÇÃO: Busca CEP agora preenche todos os campos do formulário
   const debouncedCep = useDebounce(formData.location?.cep || '', 500);
-
-  useEffect(() => {
-    if (!isAuthLoading && !user) {
-      alert("Você precisa estar logado para criar um anúncio.");
-      router.push('/login');
-    }
-  }, [user, isAuthLoading, router]);
-
   useEffect(() => {
     const cepDigits = debouncedCep.replace(/\D/g, '');
     if (cepDigits.length === 8) {
@@ -72,7 +65,7 @@ export default function NewListingPage() {
         .then(res => res.json())
         .then(data => {
           if (!data.erro) {
-            setFormData((prev) => ({ 
+            setFormData(prev => ({ 
                 ...prev, 
                 location: { 
                     ...prev.location, 
@@ -85,6 +78,23 @@ export default function NewListingPage() {
         });
     }
   }, [debouncedCep]);
+
+  // NOVO: Lógica para pré-selecionar a categoria e re-hidratar o formulário após o login
+  useEffect(() => {
+    // Se a categoria foi passada na URL, seleciona-a
+    const preselectedCategory = searchParams.get('category');
+    if (preselectedCategory && !selectedCategory) {
+      const category = mainCategories.find(c => c.id === preselectedCategory);
+      if (category) setSelectedCategory(category);
+    }
+
+    // Se houver dados de anúncio pendentes no localStorage, carrega-os
+    const pendingData = localStorage.getItem('pendingListingData');
+    if (pendingData) {
+      setFormData(JSON.parse(pendingData));
+      localStorage.removeItem('pendingListingData'); // Limpa para não carregar de novo
+    }
+  }, [searchParams, selectedCategory]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -144,9 +154,22 @@ export default function NewListingPage() {
     }
   };
 
+  // CORREÇÃO: Botão "Publicar" agora funcional e com fluxo imersivo
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || files.length === 0 || !selectedCategory) return alert("Preencha todos os campos obrigatórios e adicione pelo menos uma imagem.");
+    if (!selectedCategory) return alert("Erro: Categoria não selecionada.");
+
+    // NOVO: Verifica se o utilizador está logado ANTES de tentar submeter
+    if (!user) {
+      alert("Para publicar, por favor, faça login ou crie uma conta. O seu anúncio será guardado.");
+      // Guarda os dados atuais no localStorage
+      localStorage.setItem('pendingListingData', JSON.stringify(formData));
+      // Redireciona para o login, informando para onde voltar depois
+      router.push(`/login?redirect=/anuncios/novo&category=${selectedCategory.id}`);
+      return;
+    }
+
+    if (files.length === 0) return alert("Por favor, adicione pelo menos uma imagem.");
     if (selectedCategory.id === 'negocios' && !formData.listingType) return alert("Por favor, selecione se deseja vender ou buscar um investimento.");
     
     setIsSubmitting(true);
@@ -170,11 +193,10 @@ export default function NewListingPage() {
     } catch (error) {
       console.error("Erro ao criar anúncio:", error);
       alert("Ocorreu um erro ao publicar o seu anúncio.");
+    } finally {
       setIsSubmitting(false);
     }
   };
-
-  if (isAuthLoading || !user) { return <div className="min-h-screen flex justify-center items-center"><LoaderCircle size={48} className="animate-spin text-blue-600" /></div>; }
   
   if (submissionSuccess) {
     return (
@@ -221,7 +243,6 @@ export default function NewListingPage() {
               </h1>
               <form onSubmit={handleSubmit} className="space-y-8">
                 
-                {/* --- Bloco Especial para Negócios --- */}
                 {selectedCategory.id === 'negocios' && (
                   <div>
                     <p className="font-semibold text-xl text-text-primary mb-4">1. Qual o seu objetivo?</p>
@@ -236,7 +257,6 @@ export default function NewListingPage() {
                   </div>
                 )}
 
-                {/* --- Campos Comuns --- */}
                 <div>
                   <p className="font-semibold text-xl mb-4">Informações Gerais</p>
                   <div className="space-y-4 pl-2 border-l-2 border-blue-200">
@@ -248,18 +268,19 @@ export default function NewListingPage() {
                   </div>
                 </div>
                 
-                {/* --- Campos de Localização (Comuns) --- */}
                 <div>
                   <p className="font-semibold text-xl mb-4">Localização</p>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pl-2 border-l-2 border-blue-200">
+                  {/* CORREÇÃO: Layout do formulário de localização melhorado */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pl-2 border-l-2 border-blue-200">
                     <div className="md:col-span-1"><label>CEP</label><IMaskInput mask="00000-000" value={formData.location.cep} onAccept={(v)=>handleInputChange({target:{name:'location.cep',value:v}} as any)} className="w-full mt-1 p-2 border rounded-md"/></div>
-                    <div className="md:col-span-2"><label>Rua</label><input value={formData.location.address} disabled className="w-full mt-1 p-2 border rounded-md bg-gray-100"/></div>
+                    <div className="md:col-span-3"><label>Rua</label><input value={formData.location.address || ''} disabled className="w-full mt-1 p-2 border rounded-md bg-gray-100"/></div>
                     <div className="md:col-span-1"><label>Número</label><input name="location.number" value={formData.location.number} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md" required/></div>
-                    <div className="md:col-span-2"><label>Complemento</label><input name="location.complement" value={formData.location.complement} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md"/></div>
+                    <div className="md:col-span-3"><label>Complemento</label><input name="location.complement" value={formData.location.complement} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md"/></div>
+                    <div className="md:col-span-2"><label>Cidade</label><input value={formData.location.city || ''} disabled className="w-full mt-1 p-2 border rounded-md bg-gray-100"/></div>
+                    <div className="md:col-span-2"><label>Estado</label><input value={formData.location.state || ''} disabled className="w-full mt-1 p-2 border rounded-md bg-gray-100"/></div>
                   </div>
                 </div>
                 
-                {/* --- Campos Dinâmicos Específicos da Categoria --- */}
                 <div>
                   <p className="font-semibold text-xl mb-4">Detalhes Específicos</p>
                   <div className="space-y-4 pl-2 border-l-2 border-blue-200">
@@ -276,7 +297,6 @@ export default function NewListingPage() {
                   </div>
                 </div>
 
-                {/* --- Bloco Especial de Custos para Negócios --- */}
                 {selectedCategory.id === 'negocios' && (
                   <div>
                     <p className="font-semibold text-xl mb-4">Custos Mensais (Opcional)</p>
@@ -289,7 +309,6 @@ export default function NewListingPage() {
                   </div>
                 )}
                 
-                {/* --- Upload de Imagens (Comum) --- */}
                 <div>
                   <p className="font-semibold text-xl mb-4">Imagens (até 5)</p>
                   <div className="pl-2 border-l-2 border-blue-200">
