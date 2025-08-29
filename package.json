@@ -12,6 +12,7 @@
   "dependencies": {
     "@react-three/drei": "^10.4.4",
     "@react-three/fiber": "^9.2.0",
+    "algoliasearch": "^5.36.0",
     "firebase": "^11.10.0",
     "firebase-admin": "^13.4.0",
     "framer-motion": "^12.23.0",
@@ -20,7 +21,8 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-dropzone": "^14.3.8",
-    "react-imask": "^7.6.1"
+    "react-imask": "^7.6.1",
+    "react-instantsearch": "^7.16.2"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

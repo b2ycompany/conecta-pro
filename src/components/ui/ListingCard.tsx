@@ -7,15 +7,7 @@ import { Tag, MapPin, ArrowUpRight } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { formatCurrency } from '@/lib/formatters';
-
-// CORREÇÃO: A linha abaixo agora EXPORTA o tipo 'Listing'.
-// Isso resolve o erro de build, permitindo que outras páginas (como a de resultados)
-// importem o tipo 'Listing' diretamente deste arquivo.
-export type { Listing } from '@/lib/mockData';
-
-// O import original foi removido, pois a linha acima já torna o tipo disponível aqui.
-import type { Listing } from '@/lib/mockData';
-
+import type { Listing } from '@/lib/types'; // Agora usa o nosso tipo flexível
 
 interface ListingCardProps {
   listing: Listing;
@@ -23,50 +15,49 @@ interface ListingCardProps {
 
 export function ListingCard({ listing }: ListingCardProps) {
   
-  /**
-   * Função inteligente para formatar a localização.
-   * Ela verifica se a 'location' é um texto (formato correto) ou um objeto 
-   * (formato antigo/incorreto) e retorna sempre um texto formatado,
-   * tornando o componente robusto e à prova de erros.
-   */
   const formatLocation = (location: any): string => {
-    if (typeof location === 'string') {
-      return location;
-    }
+    if (typeof location === 'string') return location;
     if (typeof location === 'object' && location !== null) {
-      return `${location.address || ''}, ${location.number || ''} - ${location.city || ''}, ${location.state || ''}`;
+      return `${location.city || ''}, ${location.state || ''}`;
     }
     return 'Localização não informada';
   };
 
+  const getPriceAsNumber = (price: string | number): number => {
+    if (typeof price === 'number') return price;
+    if (typeof price !== 'string') return NaN;
+    const numericString = price.replace(/[^0-9,]+/g, "").replace(",", ".");
+    return parseFloat(numericString);
+  };
+
+  const numericPrice = getPriceAsNumber(listing.price);
+
   return (
-    // O cartão inteiro é um link para a página de detalhe do anúncio.
-    // Usamos a rota no plural `/anuncios/`, conforme a nossa estrutura final.
     <Link href={`/anuncios/${listing.id}`} passHref>
       <motion.div
-        className="bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-xl transition-shadow duration-300 border border-border cursor-pointer flex flex-col h-full"
+        className="bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-xl transition-shadow duration-300 border border-border cursor-pointer flex flex-col h-full group"
         whileHover={{ y: -5 }}
       >
-        {/* Imagem do Anúncio */}
         <div className="relative w-full h-48">
           <Image
-            src={listing.imageUrl || '/placeholder.png'} // Usa uma imagem placeholder se não houver URL
+            src={listing.imageUrl || '/placeholder.png'}
             alt={listing.title || 'Anúncio sem título'}
             fill
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-            className="object-cover"
+            sizes="(max-width: 768px) 100vw, 50vw, 33vw"
+            className="object-cover transition-transform duration-300 group-hover:scale-105"
           />
         </div>
-
-        {/* Conteúdo do Anúncio */}
         <div className="p-4 flex flex-col flex-grow">
-          <div className="flex items-center gap-2 text-text-secondary text-sm mb-2">
-            <Tag size={14} />
-            <span>{listing.sector}</span>
-          </div>
-          <h3 className="text-xl font-bold text-text-primary mb-2 flex-grow">
-            {listing.title}
-          </h3>
+          {/* **A CORREÇÃO PRINCIPAL ESTÁ AQUI**
+            Agora, só exibimos o 'sector' se ele existir no objeto 'listing'.
+            Isto torna o componente adaptável para qualquer categoria.
+          */}
+          {listing.sector && (
+            <div className="flex items-center gap-2 text-text-secondary text-sm mb-2">
+                <Tag size={14} /><span>{listing.sector}</span>
+            </div>
+          )}
+          <h3 className="text-xl font-bold text-text-primary mb-2 flex-grow">{listing.title}</h3>
           <div className="flex items-center gap-2 text-text-secondary text-sm mb-4">
             <MapPin size={14} /> 
             <span>{formatLocation(listing.location)}</span>
@@ -75,7 +66,7 @@ export function ListingCard({ listing }: ListingCardProps) {
             <div>
               <p className="text-text-secondary text-xs">Valor</p>
               <p className="text-xl font-bold text-blue-600">
-                {formatCurrency(listing.price)}
+                {!isNaN(numericPrice) ? formatCurrency(numericPrice) : "Preço a consultar"}
               </p>
             </div>
             <div className="bg-gray-100 p-2 rounded-full group-hover:bg-blue-100 transition-colors">

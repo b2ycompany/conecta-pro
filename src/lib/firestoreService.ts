@@ -14,11 +14,12 @@ import {
   where,
   orderBy,
   updateDoc,
-  runTransaction // Importamos a função de transação
+  runTransaction,
+  limit,
+  writeBatch // Importação necessária para transações em lote
 } from 'firebase/firestore';
-import type { Listing } from './mockData';
-
-// --- TIPOS DE DADOS PARA MAIOR SEGURANÇA ---
+// ALTERAÇÃO: Importamos os novos tipos
+import type { Listing, CategorySuggestion, ModerationMessage } from './types';
 
 export type SavedListingInfo = {
   id: string;
@@ -37,7 +38,6 @@ type UserProfile = {
     name: string;
 };
 
-// TIPO ATUALIZADO: Para incluir os dados de avaliação
 type UserDocument = { 
   profile: UserProfile; 
   reviewCount?: number; 
@@ -59,7 +59,6 @@ export type EnrichedConversation = {
   lastMessageTimestamp: any;
 };
 
-// NOVO TIPO: Para uma avaliação individual
 export type Review = {
   id: string;
   rating: number;
@@ -69,9 +68,6 @@ export type Review = {
   listingId: string;
   createdAt: any;
 };
-
-
-// --- FUNÇÕES DE SERVIÇO ---
 
 export const saveListingForUser = async (userId: string, listingId: string, listingTitle: string) => {
   try {
@@ -134,6 +130,7 @@ export const createListing = async (userId: string, formData: any) => {
         ownerId: userId,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+        status: 'pending'
       };
   
       const newListingDocRef = await addDoc(listingsCollectionRef, dataToSave);
@@ -278,11 +275,6 @@ export const getEnrichedUserConversas = async (userId: string): Promise<Enriched
     }
 };
 
-// --- NOVAS FUNÇÕES DO SISTEMA DE AVALIAÇÃO ---
-
-/**
- * Busca os dados públicos de um perfil de utilizador, incluindo as suas métricas de avaliação.
- */
 export const getUserProfile = async (userId: string): Promise<UserDocument | null> => {
     try {
         const userRef = doc(db, 'users', userId);
@@ -297,9 +289,6 @@ export const getUserProfile = async (userId: string): Promise<UserDocument | nul
     }
 };
 
-/**
- * Busca todas as avaliações que um utilizador recebeu.
- */
 export const getUserReviews = async (userId: string): Promise<Review[]> => {
     try {
         const reviewsRef = collection(db, 'users', userId, 'reviews');
@@ -312,9 +301,6 @@ export const getUserReviews = async (userId: string): Promise<Review[]> => {
     }
 };
 
-/**
- * Submete uma nova avaliação para um utilizador e recalcula a sua média de forma atómica.
- */
 export const submitReviewAndRecalculateAverage = async (
     reviewedUserId: string, 
     reviewData: {
@@ -331,22 +317,12 @@ export const submitReviewAndRecalculateAverage = async (
     try {
         await runTransaction(db, async (transaction) => {
             const userDoc = await transaction.get(userRef);
-            
-            if (!userDoc.exists()) {
-                throw "Documento do utilizador não existe!";
-            }
-            
-            // 1. Adiciona a nova avaliação na sub-coleção
+            if (!userDoc.exists()) { throw "Documento do utilizador não existe!"; }
             transaction.set(reviewRef, { ...reviewData, createdAt: serverTimestamp() });
-
-            // 2. Recalcula a média
             const currentReviewCount = userDoc.data().reviewCount || 0;
             const currentAverageRating = userDoc.data().averageRating || 0;
-            
             const newReviewCount = currentReviewCount + 1;
             const newAverageRating = ((currentAverageRating * currentReviewCount) + reviewData.rating) / newReviewCount;
-
-            // 3. Atualiza os dados agregados no documento principal do utilizador
             transaction.update(userRef, { 
                 reviewCount: newReviewCount,
                 averageRating: newAverageRating
@@ -357,4 +333,154 @@ export const submitReviewAndRecalculateAverage = async (
         console.error("Erro na transação de avaliação: ", error);
         throw new Error("Não foi possível submeter a avaliação.");
     }
+};
+
+export const getRecentListings = async (count: number = 8): Promise<Listing[]> => {
+    try {
+        const listingsRef = collection(db, 'listings');
+        const q = query(listingsRef, 
+            where('status', '==', 'approved'), 
+            orderBy('createdAt', 'desc'), 
+            limit(count)
+        );
+        const querySnapshot = await getDocs(q);
+        
+        return querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        } as Listing));
+    } catch (error) {
+        console.error("Erro ao buscar anúncios recentes: ", error);
+        return [];
+    }
+};
+
+export const getListingsByCategory = async (categoryId: string): Promise<Listing[]> => {
+    try {
+        const listingsRef = collection(db, 'listings');
+        const q = query(
+            listingsRef, 
+            where('category', '==', categoryId),
+            where('status', '==', 'approved'),
+            orderBy('createdAt', 'desc')
+        );
+        const querySnapshot = await getDocs(q);
+
+        return querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        } as Listing));
+    } catch (error) {
+        console.error(`Erro ao buscar anúncios para a categoria ${categoryId}: `, error);
+        return [];
+    }
+};
+
+export const getPendingListings = async (): Promise<Listing[]> => {
+  try {
+    const listingsRef = collection(db, 'listings');
+    const q = query(listingsRef, where('status', '==', 'pending'), orderBy('createdAt', 'desc'));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Listing));
+  } catch (error) {
+    console.error("Erro ao buscar anúncios pendentes: ", error);
+    return [];
+  }
+};
+
+export const updateListingStatus = async (listingId: string, newStatus: 'approved' | 'rejected') => {
+  try {
+    const listingRef = doc(db, 'listings', listingId);
+    await updateDoc(listingRef, { status: newStatus, updatedAt: serverTimestamp() });
+  } catch (error) {
+    console.error("Erro ao atualizar status do anúncio: ", error);
+    throw new Error("Não foi possível atualizar o status.");
+  }
+};
+
+export const submitCategorySuggestion = async (data: { categoryName: string; description: string; userId: string; userName: string; }) => {
+  try {
+    const suggestionsRef = collection(db, 'category_suggestions');
+    await addDoc(suggestionsRef, {
+      ...data,
+      status: 'pending',
+      createdAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error("Erro ao submeter sugestão de categoria: ", error);
+    throw new Error("Não foi possível enviar a sua sugestão.");
+  }
+};
+
+export const getPendingCategorySuggestions = async (): Promise<CategorySuggestion[]> => {
+  try {
+    const suggestionsRef = collection(db, 'category_suggestions');
+    const q = query(suggestionsRef, where('status', '==', 'pending'), orderBy('createdAt', 'desc'));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CategorySuggestion));
+  } catch (error) {
+    console.error("Erro ao buscar sugestões de categoria pendentes: ", error);
+    return [];
+  }
+};
+
+export const updateCategorySuggestionStatus = async (suggestionId: string, newStatus: 'approved' | 'rejected') => {
+  try {
+    const suggestionRef = doc(db, 'category_suggestions', suggestionId);
+    await updateDoc(suggestionRef, { status: newStatus });
+  } catch (error) {
+    console.error("Erro ao atualizar status da sugestão: ", error);
+    throw new Error("Não foi possível atualizar o status da sugestão.");
+  }
+};
+
+// --- NOVAS FUNÇÕES PARA O CHAT DE MODERAÇÃO ---
+
+/**
+ * Rejeita um anúncio e envia uma mensagem ao utilizador explicando o motivo.
+ * Utiliza um 'batch write' para garantir que as duas operações acontecem juntas.
+ */
+export const rejectListingWithMessage = async (
+  listingId: string,
+  adminId: string,
+  message: string
+) => {
+  try {
+    const batch = writeBatch(db);
+
+    // Operação 1: Atualiza o status do anúncio para 'rejected'
+    const listingRef = doc(db, 'listings', listingId);
+    batch.update(listingRef, { status: 'rejected', updatedAt: serverTimestamp() });
+
+    // Operação 2: Adiciona a mensagem de moderação na sub-coleção
+    const messageRef = doc(collection(listingRef, 'moderationMessages'));
+    batch.set(messageRef, {
+      text: message,
+      senderId: adminId,
+      senderName: 'Administração', // Nome padrão para mensagens do sistema
+      createdAt: serverTimestamp(),
+      isRead: false,
+    });
+
+    // Executa as duas operações atomicamente
+    await batch.commit();
+  } catch (error) {
+    console.error("Erro ao rejeitar anúncio com mensagem: ", error);
+    throw new Error("Não foi possível rejeitar o anúncio.");
+  }
+};
+
+/**
+ * Busca as mensagens de moderação para um anúncio específico.
+ */
+export const getModerationMessages = async (listingId: string): Promise<ModerationMessage[]> => {
+  try {
+    const messagesRef = collection(db, 'listings', listingId, 'moderationMessages');
+    const q = query(messagesRef, orderBy('createdAt', 'asc'));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ModerationMessage));
+  } catch (error) {
+    console.error("Erro ao buscar mensagens de moderação: ", error);
+    return [];
+  }
 };

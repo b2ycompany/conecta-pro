@@ -10,10 +10,62 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { LoaderCircle, Building, DollarSign, MapPin, Users, Percent, Phone, MessageSquare, Bookmark } from 'lucide-react';
-import type { Listing } from '@/lib/mockData';
+import { LoaderCircle, Building, DollarSign, MapPin, Users, Percent, Phone, MessageSquare, Bookmark, Car, Gauge, Calendar, Wrench } from 'lucide-react';
+import type { Listing } from '@/lib/types';
 import { saveListingForUser, removeSavedListing, isListingSaved, getOrCreateConversation } from '@/lib/firestoreService';
 import { formatCurrency, formatPercentage } from '@/lib/formatters';
+
+// Função auxiliar para converter strings (ex: "25,50") para números (ex: 25.50)
+const parseNumericString = (value: string | number | undefined): number => {
+  if (value === undefined || value === null) return NaN;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    const numericString = value.replace(/[^0-9,]+/g, "").replace(",", ".");
+    return parseFloat(numericString);
+  }
+  return NaN;
+};
+
+// Componente para detalhes de Negócios
+const BusinessDetails = ({ listing }: { listing: Listing }) => {
+  // CORREÇÃO: Convertemos os valores para número antes de formatar
+  const annualRevenue = parseNumericString(listing.annualRevenue);
+  const profitMargin = parseNumericString(listing.profitMargin);
+
+  return (
+    <>
+      <h2 className="text-2xl font-bold text-text-primary mb-4">Métricas Principais</h2>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-center">
+        <div className="bg-gray-50 p-4 rounded-lg">
+            <p className="text-sm text-text-secondary">Faturamento Anual</p>
+            <p className="text-xl font-bold text-blue-600">{!isNaN(annualRevenue) ? formatCurrency(annualRevenue) : 'N/A'}</p>
+        </div>
+        <div className="bg-gray-50 p-4 rounded-lg">
+            <p className="text-sm text-text-secondary">Margem de Lucro</p>
+            {/* O formatador de percentagem espera um decimal (ex: 0.25 para 25%) */}
+            <p className="text-xl font-bold text-blue-600">{!isNaN(profitMargin) ? formatPercentage(profitMargin / 100) : 'N/A'}</p>
+        </div>
+        <div className="bg-gray-50 p-4 rounded-lg">
+            <p className="text-sm text-text-secondary">Nº de Funcionários</p>
+            <p className="text-xl font-bold text-blue-600">{listing.employees || 'N/A'}</p>
+        </div>
+      </div>
+    </>
+  );
+};
+
+// Componente para detalhes de Veículos
+const VehicleDetails = ({ listing }: { listing: Listing }) => (
+    <>
+    <h2 className="text-2xl font-bold text-text-primary mb-4">Detalhes do Veículo</h2>
+    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <div className="bg-gray-50 p-4 rounded-lg"><p className="flex items-center gap-2 text-sm text-text-secondary mb-1"><Car size={16}/> Marca</p><p className="font-bold">{listing.brand || 'N/A'}</p></div>
+      <div className="bg-gray-50 p-4 rounded-lg"><p className="flex items-center gap-2 text-sm text-text-secondary mb-1"><Calendar size={16}/> Ano</p><p className="font-bold">{listing.year || 'N/A'}</p></div>
+      <div className="bg-gray-50 p-4 rounded-lg"><p className="flex items-center gap-2 text-sm text-text-secondary mb-1"><Gauge size={16}/> Quilometragem</p><p className="font-bold">{listing.mileage ? `${listing.mileage.toLocaleString('pt-BR')} km` : 'N/A'}</p></div>
+      <div className="bg-gray-50 p-4 rounded-lg col-span-2 md:col-span-3"><p className="flex items-center gap-2 text-sm text-text-secondary mb-1"><Wrench size={16}/> Condição</p><p className="font-bold">{listing.condition || 'N/A'}</p></div>
+    </div>
+  </>
+);
 
 export default function ListingDetailPage() { 
   const router = useRouter();
@@ -41,7 +93,6 @@ export default function ListingDetailPage() {
               setMainImage(foundListing.imageUrl);
             }
           } else {
-            console.log("Nenhum documento encontrado com este ID!");
             setListing(null);
           }
         } catch (error) {
@@ -66,7 +117,6 @@ export default function ListingDetailPage() {
 
   const handleSaveToggle = async () => {
     if (!user || !listing) return;
-
     setIsSaving(true);
     try {
       if (isSaved) {
@@ -89,28 +139,19 @@ export default function ListingDetailPage() {
         router.push('/login');
         return;
     }
-    
     if (action === 'chat') {
-        if (!listing || !listing.ownerId) {
-            alert("Erro: não foi possível encontrar os dados do vendedor.");
-            return;
-        }
+        if (!listing || !listing.ownerId) return;
         try {
             const conversationId = await getOrCreateConversation(listing.id, listing.ownerId, user.uid);
             router.push(`/mensagens/${conversationId}`);
         } catch (error) {
-            console.error("Erro ao iniciar conversa:", error);
             alert("Não foi possível iniciar a conversa.");
         }
-
     } else if (action === 'save') {
         handleSaveToggle();
-    } else {
-        alert(`Ação de '${action}' para o utilizador ${user.email}!`);
     }
-  }
+  };
 
-  // CORREÇÃO: Função inteligente para formatar a localização
   const formatLocation = (location: any): string => {
     if (typeof location === 'string') return location;
     if (typeof location === 'object' && location !== null) {
@@ -132,17 +173,19 @@ export default function ListingDetailPage() {
       <div className="min-h-screen flex flex-col justify-center items-center bg-background text-center p-4">
         <h1 className="text-4xl font-bold mb-4 text-text-primary">Anúncio Não Encontrado</h1>
         <p className="text-text-secondary">O anúncio que você procura não existe ou foi removido.</p>
-        <Link href="/" className="mt-8 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition-colors">
+        <Link href="/" className="mt-8 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg">
           Voltar para a Home
         </Link>
       </div>
     );
   }
 
+  const numericPrice = parseNumericString(listing.price);
+
   return (
     <div className="bg-background min-h-screen">
       <div className="max-w-6xl mx-auto p-4 sm:p-8">
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8 }}>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
           <div className="mb-8">
             <div className="relative w-full h-96 rounded-lg overflow-hidden shadow-lg mb-4">
               <Image src={mainImage} alt={`Imagem principal de ${listing.title}`} fill sizes="100vw" className="object-cover" />
@@ -159,44 +202,37 @@ export default function ListingDetailPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2">
               <div className="bg-white p-6 rounded-lg shadow-sm border border-border">
-                <p className="text-sm text-text-secondary flex items-center gap-2 mb-2"><Building size={14}/> {listing.sector}</p>
+                {listing.sector && <p className="text-sm text-text-secondary flex items-center gap-2 mb-2"><Building size={14}/> {listing.sector}</p>}
                 <h1 className="text-4xl font-bold text-text-primary mb-2">{listing.title}</h1>
                 <p className="text-lg text-text-secondary flex items-center gap-2 mb-6">
                   <MapPin size={18}/> 
-                  {/* CORREÇÃO APLICADA AQUI */}
                   <span>{formatLocation(listing.location)}</span>
                 </p>
                 <div className="border-t border-border my-6"></div>
                 <h2 className="text-2xl font-bold text-text-primary mb-4">Descrição</h2>
                 <p className="text-text-secondary leading-relaxed">{listing.description}</p>
                 <div className="border-t border-border my-6"></div>
-                <h2 className="text-2xl font-bold text-text-primary mb-4">Métricas Principais</h2>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-center">
-                  <div className="bg-gray-50 p-4 rounded-lg"><p className="text-sm text-text-secondary">Faturamento Anual</p><p className="text-xl font-bold text-blue-600">{formatCurrency(listing.annualRevenue)}</p></div>
-                  <div className="bg-gray-50 p-4 rounded-lg"><p className="text-sm text-text-secondary">Margem de Lucro</p><p className="text-xl font-bold text-blue-600">{formatPercentage(listing.profitMargin)}</p></div>
-                  <div className="bg-gray-50 p-4 rounded-lg"><p className="text-sm text-text-secondary">Nº de Funcionários</p><p className="text-xl font-bold text-blue-600">{listing.employees}</p></div>
-                </div>
+                
+                {listing.category === 'negocios' && <BusinessDetails listing={listing} />}
+                {listing.category === 'veiculos' && <VehicleDetails listing={listing} />}
+                
               </div>
             </div>
             <div className="lg:col-span-1">
               <div className="bg-white p-6 rounded-lg shadow-sm border border-border sticky top-24">
                 <p className="text-text-secondary text-lg">Valor de Venda</p>
-                <p className="text-4xl font-extrabold text-blue-600 mb-6">{formatCurrency(listing.price)}</p>
+                <p className="text-4xl font-extrabold text-blue-600 mb-6">{!isNaN(numericPrice) ? formatCurrency(numericPrice) : 'A consultar'}</p>
                 <div className="space-y-3">
-                  <button onClick={() => handleActionClick('chat')} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors shadow-sm">
+                  <button onClick={() => handleActionClick('chat')} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2">
                     <MessageSquare/> Enviar Mensagem
                   </button>
-                  <button onClick={() => handleActionClick('phone')} className="w-full bg-gray-100 hover:bg-gray-200 text-text-primary font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors">
+                  <button onClick={() => handleActionClick('phone')} className="w-full bg-gray-100 hover:bg-gray-200 text-text-primary font-bold py-3 rounded-lg flex items-center justify-center gap-2">
                     <Phone/> Ver Telefone
                   </button>
                   <button 
                     onClick={() => handleActionClick('save')} 
                     disabled={isSaving}
-                    className={`w-full border-2 font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all duration-200 disabled:opacity-50 ${
-                      isSaved 
-                        ? 'bg-green-600 text-white border-transparent' 
-                        : 'border-gray-300 hover:bg-gray-50 text-gray-600'
-                    }`}
+                    className={`w-full border-2 font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all ${ isSaved ? 'bg-green-600 text-white border-transparent' : 'border-gray-300 hover:bg-gray-50 text-gray-600' }`}
                   >
                     {isSaving ? <LoaderCircle className="animate-spin" /> : <Bookmark/>}
                     {isSaved ? 'Salvo!' : 'Salvar Anúncio'}

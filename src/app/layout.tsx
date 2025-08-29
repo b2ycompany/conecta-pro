@@ -6,7 +6,9 @@ import "@/styles/globals.css";
 import { Header } from "@/components/layout/Header";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { FloatingContactButton } from "@/components/ui/FloatingContactButton";
-import Footer from "@/components/layout/Footer"; // Importando o novo componente de rodapé
+import Footer from "@/components/layout/Footer";
+// ALTERAÇÃO: Importamos o nosso novo Provider
+import { SplashScreenProvider } from "@/contexts/SplashScreenContext";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -24,12 +26,15 @@ export default function RootLayout({
     <html lang="pt-br">
       <body className={`${inter.className} flex flex-col min-h-screen`}>
         <AuthProvider>
-          <Header />
-          <main className="flex-grow">
-            {children}
-          </main>
-          <Footer />
-          <FloatingContactButton />
+          {/* ALTERAÇÃO: O SplashScreenProvider envolve tudo */}
+          <SplashScreenProvider>
+            <Header />
+            <main className="flex-grow">
+              {children}
+            </main>
+            <Footer />
+            <FloatingContactButton />
+          </SplashScreenProvider>
         </AuthProvider>
       </body>
     </html>

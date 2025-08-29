@@ -10,14 +10,18 @@ import {
   Sofa, 
   BriefcaseBusiness, 
   Dog,
-  Ticket
+  Ticket,
+  PiggyBank
 } from 'lucide-react';
 
+// ALTERAÇÃO: Adicionada uma propriedade 'journeys' a cada categoria.
+// Isto permite-nos saber em que jornada (comprar, vender, investir) cada categoria deve aparecer.
 export const mainCategories = [
   {
     id: 'negocios',
     name: 'Negócios e Investimentos',
     icon: Building,
+    journeys: ['buy', 'sell', 'invest'], // Disponível em todas as jornadas
     fields: [
       { name: 'price', label: 'Preço de Venda / Aporte', type: 'currency', required: true },
       { name: 'annualRevenue', label: 'Faturamento Anual', type: 'currency', required: false },
@@ -29,6 +33,7 @@ export const mainCategories = [
     id: 'imoveis',
     name: 'Imóveis',
     icon: Home,
+    journeys: ['buy', 'sell', 'invest'], // Também pode ser um investimento
     fields: [
       { name: 'price', label: 'Preço de Venda / Aluguel', type: 'currency', required: true },
       { name: 'bedrooms', label: 'Nº de Quartos', type: 'number', required: true },
@@ -40,6 +45,7 @@ export const mainCategories = [
     id: 'veiculos',
     name: 'Veículos',
     icon: Car,
+    journeys: ['buy', 'sell'],
     fields: [
       { name: 'price', label: 'Preço de Venda', type: 'currency', required: true },
       { name: 'brand', label: 'Marca', type: 'text', required: true },
@@ -52,6 +58,7 @@ export const mainCategories = [
     id: 'eletronicos',
     name: 'Eletrônicos',
     icon: Smartphone,
+    journeys: ['buy', 'sell'],
     fields: [
         { name: 'price', label: 'Preço de Venda', type: 'currency', required: true },
         { name: 'brand', label: 'Marca', type: 'text', required: true },
@@ -63,6 +70,7 @@ export const mainCategories = [
     id: 'roupas',
     name: 'Roupas e Acessórios',
     icon: Shirt,
+    journeys: ['buy', 'sell'],
     fields: [
         { name: 'price', label: 'Preço de Venda', type: 'currency', required: true },
         { name: 'brand', label: 'Marca', type: 'text', required: false },
@@ -74,6 +82,7 @@ export const mainCategories = [
     id: 'servicos',
     name: 'Serviços',
     icon: Wrench,
+    journeys: ['buy', 'sell'],
     fields: [
       { name: 'price', label: 'Preço (ou Preço/hora)', type: 'currency', required: true },
       { name: 'serviceType', label: 'Tipo de Serviço', type: 'text', required: true },
@@ -84,6 +93,7 @@ export const mainCategories = [
     id: 'casa_e_jardim',
     name: 'Para Casa e Jardim',
     icon: Sofa,
+    journeys: ['buy', 'sell'],
     fields: [
       { name: 'price', label: 'Preço de Venda', type: 'currency', required: true },
       { name: 'condition', label: 'Condição (Novo/Usado)', type: 'text', required: true },
@@ -94,6 +104,7 @@ export const mainCategories = [
     id: 'empregos',
     name: 'Vagas de Emprego',
     icon: BriefcaseBusiness,
+    journeys: [], // Uma vaga de emprego não se 'compra' ou 'vende' da mesma forma
     fields: [
       { name: 'salary', label: 'Salário / Remuneração', type: 'currency', required: true },
       { name: 'role', label: 'Cargo / Posição', type: 'text', required: true },
@@ -105,6 +116,7 @@ export const mainCategories = [
     id: 'animais',
     name: 'Animais de Estimação',
     icon: Dog,
+    journeys: ['buy', 'sell'],
     fields: [
       { name: 'price', label: 'Preço', type: 'currency', required: true },
       { name: 'breed', label: 'Raça', type: 'text', required: true },
@@ -115,11 +127,24 @@ export const mainCategories = [
     id: 'eventos',
     name: 'Ingressos e Eventos',
     icon: Ticket,
+    journeys: ['buy', 'sell'],
     fields: [
       { name: 'price', label: 'Preço do Ingresso', type: 'currency', required: true },
       { name: 'eventName', label: 'Nome do Evento', type: 'text', required: true },
       { name: 'eventDate', label: 'Data do Evento', type: 'date', required: true },
       { name: 'eventLocation', label: 'Local do Evento', type: 'text', required: true },
+    ]
+  },
+  // NOVA CATEGORIA SUGERIDA PARA A JORNADA "INVESTIR"
+  {
+    id: 'startups',
+    name: 'Startups',
+    icon: PiggyBank,
+    journeys: ['invest'],
+    fields: [
+      { name: 'price', label: 'Investimento Procurado', type: 'currency', required: true },
+      { name: 'sector', label: 'Setor da Startup', type: 'text', required: true },
+      { name: 'valuation', label: 'Valuation', type: 'currency', required: false },
     ]
   },
 ];

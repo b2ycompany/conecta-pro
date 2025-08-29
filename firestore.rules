@@ -1,0 +1,56 @@
+// firestore.rules
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+  
+    // Função auxiliar para verificar se um utilizador é administrador
+    function isAdmin() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Regras para a coleção 'listings' (Anúncios)
+    match /listings/{listingId} {
+      // Qualquer pessoa pode ler um anúncio APROVADO
+      allow read: if resource.data.status == 'approved';
+      
+      // Um utilizador só pode criar um anúncio se estiver logado
+      allow create: if request.auth != null;
+      
+      // Um utilizador só pode atualizar ou excluir o SEU PRÓPRIO anúncio
+      allow update, delete: if request.auth.uid == resource.data.ownerId;
+      
+      // Um admin pode atualizar QUALQUER anúncio (para aprovar/rejeitar)
+      allow update: if isAdmin();
+      
+      // O criador do anúncio ou um admin pode ler as mensagens de moderação
+      match /moderationMessages/{messageId} {
+        allow read: if request.auth.uid == get(/databases/$(database)/documents/listings/$(listingId)).data.ownerId || isAdmin();
+      }
+    }
+    
+    // Regras para a coleção 'category_suggestions'
+    match /category_suggestions/{suggestionId} {
+      // Qualquer utilizador logado pode criar uma sugestão
+      allow create: if request.auth != null;
+      
+      // Apenas administradores podem ler, atualizar ou excluir sugestões
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Regras para a coleção 'users'
+    match /users/{userId} {
+      // Qualquer pessoa pode ler o perfil público de um utilizador
+      allow read;
+      
+      // Um utilizador só pode escrever no seu próprio documento de perfil
+      allow write: if request.auth.uid == userId;
+    }
+    
+    // Por defeito, nega acesso a todas as outras coleções não especificadas
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

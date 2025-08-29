@@ -2,79 +2,132 @@
 
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { ListingCard, type Listing } from '@/components/ui/ListingCard';
-import { LoaderCircle, SearchX, ArrowLeft } from 'lucide-react';
+import { Suspense } from 'react';
+// CORREÇÃO DEFINITIVA: Usamos 'require' para forçar a importação correta e resolver o conflito de módulos.
+const algoliasearch = require('algoliasearch/lite');
+import { 
+  InstantSearch,
+  SearchBox,
+  Hits,
+  RefinementList,
+  Pagination,
+  Configure,
+  Stats
+} from 'react-instantsearch';
+import { useSearchParams } from 'next/navigation';
+import { ListingCard } from '@/components/ui/ListingCard';
+import type { Listing } from '@/lib/types';
+import { LoaderCircle } from 'lucide-react';
 
-function ResultsPageContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const [listings, setListings] = useState<Listing[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+// A inicialização do cliente agora funciona sem erros.
+const searchClient = algoliasearch(
+  process.env.NEXT_PUBLIC_ALGOLIA_APP_ID || '',
+  process.env.NEXT_PUBLIC_ALGOLIA_SEARCH_ONLY_API_KEY || ''
+);
 
-  useEffect(() => {
-    const query = searchParams.toString();
-    const fetchListings = async () => {
-      setIsLoading(true);
-      try {
-        const response = await fetch(`/api/anuncios?${query}`);
-        const data = await response.json();
-        setListings(data);
-      } catch (error) {
-        console.error("Falha ao buscar anúncios:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchListings();
-  }, [searchParams]);
-
-  return (
-    <div className="min-h-screen bg-background p-4 sm:p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-8 flex-wrap gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-text-primary mb-2">Oportunidades Encontradas</h1>
-            <p className="text-text-secondary">Com base nos seus critérios, encontrámos {listings.length} resultados.</p>
-          </div>
-          {/* BOTÃO DE NOVA BUSCA ADICIONADO */}
-          <button 
-            onClick={() => router.push('/comprar')}
-            className="bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2 rounded-md transition-colors flex items-center gap-2"
-          >
-            <ArrowLeft size={16} />
-            Fazer Nova Busca
-          </button>
-        </div>
-        
-        {isLoading ? (
-          <div className="flex justify-center items-center h-64 text-text-secondary gap-3">
-            <LoaderCircle size={32} className="animate-spin text-primary" />
-            <span className="text-xl">A buscar as melhores oportunidades...</span>
-          </div>
-        ) : listings.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {listings.map(listing => (
-              <ListingCard key={listing.id} listing={listing} />
-            ))}
-          </div>
-        ) : (
-          <div className="flex flex-col justify-center items-center h-64 text-text-secondary gap-4 text-center border-2 border-dashed border-border rounded-lg">
-            <SearchX size={48} className="text-gray-400" />
-            <h2 className="text-2xl font-semibold text-text-primary">Nenhum resultado encontrado</h2>
-            <p>Tente ajustar os seus filtros de busca para encontrar mais oportunidades.</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+// Componente de Resultado Personalizado (sem alterações)
+function Hit({ hit }: { hit: any }) {
+  const listingForCard: Listing = {
+    id: hit.objectID,
+    title: hit.title || '',
+    price: hit.price || '0',
+    imageUrl: hit.imageUrl || '',
+    location: hit.location || { city: 'N/A', state: ''},
+    description: hit.description || '',
+    category: hit.category || '',
+    ownerId: hit.ownerId || '',
+    createdAt: hit.createdAt,
+    status: hit.status || 'approved'
+  };
+  return <ListingCard listing={listingForCard} />;
 }
 
-export default function ResultsPage() {
+// O Conteúdo da Página de Busca (sem alterações)
+function SearchPageContent() {
+    const searchParams = useSearchParams();
+    const query = searchParams.get('query') || '';
+    const initialCategoryRefinement = searchParams.get('refine_category')?.split(',') || [];
+    
     return (
-        <Suspense fallback={<div>A carregar...</div>}>
-            <ResultsPageContent />
-        </Suspense>
-    )
+        <InstantSearch 
+            searchClient={searchClient} 
+            indexName="listings"
+            routing 
+        >
+            <Configure
+                query={query}
+                facetFilters={initialCategoryRefinement.map(cat => `category:${cat}`)}
+            />
+            
+            <div className="max-w-7xl mx-auto p-4 sm:p-8">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+                    <aside className="md:col-span-1">
+                        <div className="sticky top-24 space-y-6">
+                           <div>
+                                <h3 className="font-semibold mb-2 text-text-primary">Pesquisar por Termo</h3>
+                                <SearchBox 
+                                    placeholder="Ex: Restaurante em Cotia" 
+                                    className="w-full"
+                                    classNames={{ 
+                                        input: "w-full p-2 border rounded-md shadow-sm", 
+                                        submitIcon: "hidden", 
+                                        resetIcon: "hidden" 
+                                    }}
+                                />
+                           </div>
+                           <div>
+                                <h3 className="font-semibold mb-2 text-text-primary">Categorias</h3>
+                                <RefinementList 
+                                  attribute="category" 
+                                  classNames={{ 
+                                      list: 'space-y-2', 
+                                      label: 'flex items-center gap-2 cursor-pointer',
+                                      checkbox: 'h-4 w-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300',
+                                      labelText: 'text-sm text-text-secondary',
+                                      count: 'ml-auto text-xs bg-gray-200 px-2 py-0.5 rounded-full'
+                                  }}
+                                />
+                           </div>
+                        </div>
+                    </aside>
+
+                    <main className="md:col-span-3">
+                        <div className="flex justify-between items-center mb-4">
+                           <Stats classNames={{ 
+                               root: 'text-sm text-text-secondary font-semibold',
+                           }}/>
+                        </div>
+
+                        <Hits 
+                            hitComponent={Hit} 
+                            classNames={{
+                                root: 'min-h-[500px]',
+                                list: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6',
+                                item: 'list-none'
+                            }} 
+                        />
+
+                        <div className="mt-8 flex justify-center">
+                            <Pagination classNames={{
+                                list: 'flex items-center gap-1 sm:gap-2',
+                                link: 'p-1',
+                                pageItem: 'px-3 py-1 rounded-md text-sm hover:bg-gray-100',
+                                selectedItem: 'bg-blue-600 text-white font-bold hover:bg-blue-600',
+                                disabledItem: 'opacity-50 cursor-not-allowed',
+                            }} />
+                        </div>
+                    </main>
+                </div>
+            </div>
+        </InstantSearch>
+    );
+}
+
+// A página final (sem alterações)
+export default function ResultadosPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex justify-center items-center"><LoaderCircle className="animate-spin text-blue-600" size={48} /></div>}>
+      <SearchPageContent />
+    </Suspense>
+  )
 }

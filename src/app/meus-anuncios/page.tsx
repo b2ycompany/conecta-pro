@@ -5,11 +5,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { LoaderCircle, ListPlus, Edit, Trash2 } from 'lucide-react';
+import { LoaderCircle, ListPlus } from 'lucide-react';
 import { getUserCreatedListings, deleteListing } from '@/lib/firestoreService';
-import type { Listing } from '@/lib/mockData';
+import type { Listing } from '@/lib/types'; // Import corrigido
 import Link from 'next/link';
-import { ListingCard } from '@/components/ui/ListingCard'; // Reutilizamos o nosso cartão de visualização
+import { MyListingCard } from '@/components/ui/MyListingCard'; // ALTERAÇÃO: Usamos o MyListingCard
 
 export default function MyListingsPage() {
     const { user, isLoading: isAuthLoading } = useAuth();
@@ -17,7 +17,6 @@ export default function MyListingsPage() {
     const [myListings, setMyListings] = useState<Listing[]>([]);
     const [isLoadingData, setIsLoadingData] = useState(true);
 
-    // Função para buscar os anúncios, que pode ser chamada novamente após uma exclusão
     const fetchMyListings = useCallback(() => {
         if (user) {
             setIsLoadingData(true);
@@ -42,8 +41,7 @@ export default function MyListingsPage() {
         if (window.confirm(`Tem a certeza que deseja excluir o anúncio "${listingTitle}"? Esta ação não pode ser desfeita.`)) {
             try {
                 await deleteListing(listingId);
-                // Atualiza a lista de anúncios na tela após a exclusão
-                fetchMyListings();
+                fetchMyListings(); // Recarrega a lista para refletir a exclusão
                 alert("Anúncio excluído com sucesso.");
             } catch (error) {
                 alert("Ocorreu um erro ao excluir o anúncio.");
@@ -62,27 +60,20 @@ export default function MyListingsPage() {
                     <h1 className="text-4xl font-bold text-text-primary">Meus Anúncios</h1>
                     <p className="text-lg text-text-secondary mt-2">Gira, edite ou exclua os seus anúncios publicados.</p>
                 </div>
-                <Link href="/anuncios/novo" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2">
+                <Link href="/anuncios/novo" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors">
                     <ListPlus size={18}/> Criar Novo Anúncio
                 </Link>
             </div>
 
             {myListings.length > 0 ? (
-                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     {myListings.map(listing => (
-                        <div key={listing.id} className="bg-white rounded-lg shadow-sm border border-border flex flex-col">
-                            {/* O cartão é para visualização e link */}
-                            <ListingCard listing={listing} />
-                            {/* A barra de ações é separada */}
-                            <div className="flex border-t border-border">
-                                <Link href={`/anuncios/editar/${listing.id}`} className="flex-1 flex items-center justify-center gap-2 p-3 text-sm font-medium text-text-secondary hover:bg-gray-50 rounded-bl-lg transition-colors">
-                                    <Edit size={14} /> Editar
-                                </Link>
-                                <button onClick={() => handleDelete(listing.id, listing.title)} className="flex-1 flex items-center justify-center gap-2 p-3 text-sm font-medium text-red-500 hover:bg-red-50 rounded-br-lg transition-colors border-l border-border">
-                                    <Trash2 size={14} /> Excluir
-                                </button>
-                            </div>
-                        </div>
+                        // ALTERAÇÃO: Renderizamos o MyListingCard que contém toda a lógica de status e ações
+                        <MyListingCard 
+                            key={listing.id} 
+                            listing={listing} 
+                            onDelete={handleDelete}
+                        />
                     ))}
                 </div>
             ) : (
